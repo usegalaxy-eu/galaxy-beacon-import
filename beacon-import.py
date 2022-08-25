@@ -14,6 +14,7 @@ import os
 import re
 from dataclasses import dataclass
 from typing import Dict, List
+from argparse import Namespace
 
 # import utilities from beacon-python
 # pip install git+https://github.com/CSCfi/beacon-python
@@ -22,6 +23,7 @@ from typing import Dict, List
 import asyncpg
 from beacon_api.utils.db_load import BeaconDB
 from bioblend.galaxy import GalaxyInstance
+
 # cyvcf2 is a vcf parser
 from cyvcf2 import VCF, Variant
 
@@ -65,11 +67,19 @@ class BeaconExtendedDB(BeaconDB):
 db: BeaconExtendedDB = BeaconExtendedDB()
 
 
-def parse_arguments():
+def parse_arguments() -> Namespace:
     """
-    Parses command line arguments with argparse
+    Defines and parses command line arguments for this script
+
+        Parameters:
+            None.
+
+        Returns:
+            args (Namespace): argparse.Namespace object containing the parsed arguments
     """
     parser = argparse.ArgumentParser(description="Push genomic variants from galaxy to beacon.")
+    subparsers = parser.add_subparsers(dest='command')
+    subparsers.required = True
 
     # arguments controlling output 
     parser.add_argument("-v", "--verbosity", action="count", default=0,
@@ -81,10 +91,23 @@ def parse_arguments():
     parser.add_argument("-k", "--galaxy-key", type=str, metavar="", default="6edbc8a89bbff89bb5232867edc1183c",
                         dest="galaxy_key", help="API key of a galaxy user WITH ADMIN PRIVILEGES")
 
-    parser.add_argument("-o", "--origins-file", type=str, metavar="", default="/tmp/variant-origins.txt",
-                        dest="origins_file", help="full file path of where variant origins should be stored")
-    parser.add_argument("-s", "--skip-origins", default=False, dest="skip_origins",
-                        action="store_true", help="do not store variant origins")
+    # sub-parser for command "rebuild"
+    parser_rebuild = subparsers.add_parser('rebuild')
+    parser_rebuild.add_argument("-s", "--store-origins", default=False, dest="store_origins",
+                                action="store_true",
+                                help="make a local file containing variantIDs with the dataset they stem from")
+    parser_rebuild.add_argument("-o", "--origins-file", type=str, metavar="", default="/tmp/variant-origins.txt",
+                                dest="origins_file",
+                                help="full file path of where variant origins should be stored (if enabled)")
+
+    # sub-parser for command search
+    parser_search = subparsers.add_parser('search')
+    parser_search.add_argument("-s", "--start", type=int, metavar="", dest="start", required=True,
+                               help="start position of the searched variant")
+    parser_search.add_argument("-r", "--ref", type=str, metavar="", dest="ref", required=True,
+                               help="sequence in the reference")
+    parser_search.add_argument("-a", "--alt", type=str, metavar="", dest="alt", required=True,
+                               help="alternate sequence found in the variant")
 
     return parser.parse_args()
 
@@ -95,6 +118,9 @@ def set_up_logging(verbosity: int):
 
         Parameters:
             verbosity (int):
+
+        Returns:
+            Nothing.
     """
 
     # configure log level to match the given verbosity
@@ -157,7 +183,7 @@ def set_up_galaxy_instance(galaxy_url: str, galaxy_key: str) -> GalaxyInstance:
     return gi
 
 
-def get_beacon_histories(gi: GalaxyInstance) -> List[Dict[str, str]]:
+def get_beacon_histories(gi: GalaxyInstance) -> List[str]:
     """
     Fetches beacon history IDs from galaxy
 
@@ -165,21 +191,47 @@ def get_beacon_histories(gi: GalaxyInstance) -> List[Dict[str, str]]:
             gi (GalaxyInstance): galaxy instance from which to fetch history IDs
 
         Returns:
-            beacon_histories (List[Dict[str, str]]: List of beacon histories in format {"history_id": "<ID>"}
+            beacon_histories (List[str]): IDs of all histories that should be imported to beacon
     """
-    beacon_histories_response = gi.make_get_request("{}/api/histories/beacon".format(gi.base_url))
 
-    if beacon_histories_response.status_code != 200:
-        # TODO error handling
-        logging.critical("bla")
+    beacon_histories: List[str] = []
 
-    beacon_histories_response_body = json.loads(beacon_histories_response.content)
+    # get histories with the name "___BEACON_PICKUP___"
+    histories: List[Dict] = []
+    pagesize: int = 30
+    offset: int = 0
 
-    if not "beacon_histories" in beacon_histories_response_body:
-        # TODO error handling
-        logging.critical("bla")
+    # This while loop will read all matching histories using the paging of the galaxy api
+    while True:
+        response = gi.make_get_request(
+            f"{gi.base_url}/api/histories?q=name&qv=___BEACON_PICKUP___&all=true&offset={offset}&limit={pagesize}")
 
-    return beacon_histories_response_body["beacon_histories"]
+        # Check for status code OK
+        if response.status_code != 200:
+            logging.critical("failed to get histories from galaxy")
+            logging.critical(f"got status {response.status_code} with content {response.content}")
+            exit(2)
+
+        # Save the histories from the current page
+        history_page = json.loads(response.content)
+        histories.extend(history_page)
+
+        # All histories have been read when the first non-full page appears
+        if len(history_page) < pagesize:
+            break
+
+    for history in histories:
+        history_details = gi.histories.show_history(history["id"])
+        history_user = gi.users.show_user(history_details["user_id"])
+
+        # Filter users which have a beacon history but did not enable beacon sharing
+        history_user_preferences: Dict[str, str] = history_user["preferences"]
+        if "beacon_enabled" not in history_user_preferences or history_user_preferences["beacon_enabled"] != "1":
+            continue
+
+        beacon_histories.append(history["id"])
+
+    return beacon_histories
 
 
 class MissingFieldException(Exception):
@@ -468,12 +520,23 @@ def cleanup(dataset_file: str, metadata_file: str):
     os.remove(metadata_file)
 
 
-def main():
-    args = parse_arguments()
-    set_up_logging(args.verbosity)
-    gi = set_up_galaxy_instance(args.galaxy_url, args.galaxy_key)
+def command_rebuild(args: Namespace):
+    """
+    Rebuilds beacon database based on datasets retrieved from galaxy
+
+        Parameters:
+             None.
+
+        Returns:
+            Nothing.
+
+        Note:
+            This function uses args from the rebuild subparser
+    """
 
     global db
+    gi = set_up_galaxy_instance(args.galaxy_url, args.galaxy_key)
+
     # connect to beacons database
     loop = asyncio.get_event_loop()
     loop.run_until_complete(db.connection())
@@ -481,7 +544,7 @@ def main():
     # delete all data before the new import
     loop.run_until_complete(db.clear_database())
 
-    if not args.skip_origins:
+    if args.store_origins:
         try:
             os.remove(args.origins_file)
         except:
@@ -492,8 +555,8 @@ def main():
         variant_origins_file = open(args.origins_file, "a")
 
     # load data from beacon histories
-    for history in get_beacon_histories(gi):
-        for dataset in get_datasets(gi, history["history_id"]):
+    for history_id in get_beacon_histories(gi):
+        for dataset in get_datasets(gi, history_id):
             # dataset import happens here
             logging.info("next file is {}".format(dataset.name))
 
@@ -508,8 +571,50 @@ def main():
             beacon_import(dataset_file, metadata_file)
 
             # save the origin of the variants in beacon database
-            if not args.skip_origins:
+            if args.store_origins:
                 loop.run_until_complete(persist_variant_origins(dataset.id, VCF(dataset_file), variant_origins_file))
+
+
+def command_search(args: Namespace):
+    """
+
+    """
+    gi = set_up_galaxy_instance(args.galaxy_url, args.galaxy_key)
+
+    print(f"searching variant {args.ref} -> {args.alt} at position {args.start} (each dot is one dataset)\n")
+    # load data from beacon histories
+    for history_id in get_beacon_histories(gi):
+        for dataset in get_datasets(gi, history_id):
+
+            dataset_file = "/tmp/searching-{}".format(dataset.uuid)
+            download_dataset(gi, dataset, dataset_file)
+
+            dataset_vcf: VCF
+            dataset_vcf = VCF(dataset_file)
+
+            variant: Variant
+            for variant in dataset_vcf:
+
+                if variant.start == args.start and variant.REF == args.ref and args.alt in variant.ALT:
+                    print(f"found variant in dataset {dataset.id} ({dataset.name})")
+
+            os.remove(dataset_file)
+
+
+def main():
+    """
+    Main function runs sub commands based on the given command line arguments
+    """
+    args = parse_arguments()
+
+    print(type(args))
+    set_up_logging(args.verbosity)
+
+    if args.command == "rebuild":
+        command_rebuild(args)
+
+    if args.command == "search":
+        command_search(args)
 
 
 if __name__ == '__main__':
