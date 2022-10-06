@@ -13,7 +13,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Any, Dict, List
 from argparse import Namespace
 
 # import utilities from beacon-python
@@ -22,6 +22,7 @@ from argparse import Namespace
 # TODO can we install it like this
 import asyncpg
 from beacon_api.utils.db_load import BeaconDB
+from requests import Response
 from bioblend.galaxy import GalaxyInstance
 
 # cyvcf2 is a vcf parser
@@ -48,24 +49,50 @@ class BeaconExtendedDB(BeaconDB):
 
         self._conn: asyncpg.Connection
         rows = await self._conn.fetch(
-            "SELECT index FROM beacon_data_table where start={} AND reference='{}' and alternate='{}'".format(start,
-                                                                                                              ref, alt))
+            f"SELECT index FROM beacon_data_table where start={start} AND reference='{ref}' and alternate='{alt}'")
         return [row["index"] for row in rows]
 
     async def clear_database(self):
         """
         Removes all data from beacons internal database
 
-        The database schema, however, will remain unchanged
+        The database schema will remain unchanged
         """
         await self._conn.execute("DELETE FROM beacon_data_table")
         await self._conn.execute("DELETE FROM beacon_dataset_table")
         await self._conn.execute("DELETE FROM beacon_dataset_counts_table")
 
 
+    async def update_dataset_counts(self):
+        """
+        Calculates and sets actual counts for the accumulated datasets
+
+            Parameters:
+                None
+            
+            Returns:
+                Nothing
+        """
+        records: List[asyncpg.Record] = await self._conn.fetch(
+            "SELECT datasetid, COUNT(*) as count, SUM(callcount) as callcount FROM beacon_data_table GROUP BY datasetid")
+
+        # clear beacon_dataset_counts table
+        # beacon_init function will add multiple lines for the same dataset, one for each file that is imported
+        await self._conn.execute("DELETE FROM beacon_dataset_counts_table")
+
+        # persist the actual count values
+        for dataset in records:
+            await self._conn.execute(
+                f"INSERT INTO beacon_dataset_counts_table(datasetid, callcount, variantcount) " +
+                f"VALUES('{dataset['datasetid']}', {dataset['count']}, {dataset['callcount']})")
+
+        # hide the sample count
+        await self._conn.execute("UPDATE beacon_dataset_table SET samplecount = NULL")
+
+
+
 # global variable for beacon connection
 db: BeaconExtendedDB = BeaconExtendedDB()
-
 
 def parse_arguments() -> Namespace:
     """
@@ -145,7 +172,7 @@ def set_up_galaxy_instance(galaxy_url: str, galaxy_key: str) -> GalaxyInstance:
             gi (GalaxyInstance): Galaxy instance with confirmed admin access to the given galaxy instance
     """
 
-    logging.info("trying to connect to galaxy at {}".format(galaxy_url))
+    logging.info(f"trying to connect to galaxy at {galaxy_url}")
 
     # configure a galaxy instance with galaxy_url and api_key
     try:
@@ -153,7 +180,7 @@ def set_up_galaxy_instance(galaxy_url: str, galaxy_key: str) -> GalaxyInstance:
     except Exception as e:
         # if galaxy_url does not follow the scheme <protocol>://<host>:<port>, GalaxyInstance attempts guessing the URL 
         # this exception is thrown when neither "http://<galaxy_url>:80" nor "https://<galaxy_url>:443" are accessible
-        logging.critical("failed to guess URL from \"{}\" - {}".format(galaxy_url, e))
+        logging.critical(f"failed to guess URL from \"{galaxy_url}\" - {e}")
         exit(2)
 
     # test network connection and successful authentification
@@ -164,15 +191,14 @@ def set_up_galaxy_instance(galaxy_url: str, galaxy_key: str) -> GalaxyInstance:
         # this request should not fail
         if response.status_code != 200:
             logging.critical(
-                "connection test failed - got HTTP status \"{}\" with message \"{}\"".format(response.status_code,
-                                                                                             content["err_msg"]))
+                f"connection test failed - got HTTP status \"{response.status_code}\" with message \"{content['err_msg']}\"")
             exit(2)
 
-        logging.info("connection successful - logged in as user \"{}\"".format(content["username"]))
+        logging.info(f"connection successful - logged in as user \"{content['username']}\"")
 
     except Exception as e:
         # if the network connection fails, GalaxyInstance will throw an exception
-        logging.critical("exception during connection test - \"{}\"".format(e))
+        logging.critical(f"exception during connection test - \"{e}\"")
         exit(2)
 
     # test connection with a GET to /api/whoami
@@ -193,45 +219,35 @@ def get_beacon_histories(gi: GalaxyInstance) -> List[str]:
         Returns:
             beacon_histories (List[str]): IDs of all histories that should be imported to beacon
     """
+    # history ids will be collected in this lsit
+    history_ids: List[str] = []
 
-    beacon_histories: List[str] = []
+    # get histories from galaxy api
+    # URL is used because the name filter is not supported by bioblend as of now
+    response: Response = gi.make_get_request(f"{gi.base_url}/api/histories?q=name&qv=___BEACON_PICKUP___&all=true")
 
-    # get histories with the name "___BEACON_PICKUP___"
-    histories: List[Dict] = []
-    pagesize: int = 30
-    offset: int = 0
+    # check if the reuest was successful
+    if response.status_code != 200:
+        logging.critical("failed to get histories from galaxy")
+        logging.critical(f"got status {response.status_code} with content {response.content}")
+        exit(2)
 
-    # This while loop will read all matching histories using the paging of the galaxy api
-    while True:
-        response = gi.make_get_request(
-            f"{gi.base_url}/api/histories?q=name&qv=___BEACON_PICKUP___&all=true&offset={offset}&limit={pagesize}")
+    # retrieve histories from response body
+    histories: List[Dict] = json.loads(response.content)
 
-        # Check for status code OK
-        if response.status_code != 200:
-            logging.critical("failed to get histories from galaxy")
-            logging.critical(f"got status {response.status_code} with content {response.content}")
-            exit(2)
-
-        # Save the histories from the current page
-        history_page = json.loads(response.content)
-        histories.extend(history_page)
-
-        # All histories have been read when the first non-full page appears
-        if len(history_page) < pagesize:
-            break
-
+    # for each history double check if the user has beacon sharing enabled
     for history in histories:
-        history_details = gi.histories.show_history(history["id"])
-        history_user = gi.users.show_user(history_details["user_id"])
+        history_details: Dict[str, Any] = gi.histories.show_history(history["id"])
+        user_details: Dict[str, Any] = gi.users.show_user(history_details["user_id"])
 
-        # Filter users which have a beacon history but did not enable beacon sharing
-        history_user_preferences: Dict[str, str] = history_user["preferences"]
+        # skip adding the history if beacon_enabled is not set for the owner account
+        history_user_preferences: Dict[str, str] = user_details["preferences"]
         if "beacon_enabled" not in history_user_preferences or history_user_preferences["beacon_enabled"] != "1":
             continue
 
-        beacon_histories.append(history["id"])
+        history_ids.append(history["id"])
 
-    return beacon_histories
+    return history_ids
 
 
 class MissingFieldException(Exception):
@@ -264,7 +280,7 @@ class GalaxyDataset:
         for key in ["name", "id", "uuid", "extension", "metadata_dbkey"]:
             # check for exceptions instead of silently using default
             if not key in info:
-                raise MissingFieldException("key \"{}\" not defined".format(key))
+                raise MissingFieldException(f"key \"{key}\" not defined")
 
         self.name = info["name"]
         self.id = info["id"]
@@ -319,14 +335,14 @@ def get_datasets(gi: GalaxyInstance, history_id: str) -> List[GalaxyDataset]:
                 # the exception is thrown by the constructor of GalaxyDataset which checks if all keys that are used
                 # actually exists
                 logging.warning(
-                    "not reading dataset {} because {} from api response".format(api_dataset_list_entry["id"], e))
+                    f"not reading dataset {api_dataset_list_entry['id']} because {e} from api response")
 
             # filter for valid human references
             match = re.match(r"(GRCh\d+|hg\d+).*", dataset.reference_name)
             if match is None:
                 # skip datasets with unknown references
                 logging.warning(
-                    "not reading dataset {} with unknown reference \"{}\"".format(dataset.name, dataset.reference_name))
+                    f"not reading dataset {dataset.name} with unknown reference \"{dataset.reference_name}\"")
                 continue
 
             # set reference name to the first match group
@@ -400,27 +416,19 @@ def prepare_metadata_file(dataset: GalaxyDataset, output_path: str) -> None:
             True if the metadata file has been written and False if ..
     """
 
-    # TODO get call count from dataset
-    call_count: int
-    call_count = 123
-
-    # TODO get call count from dataset
-    variant_count: int
-    variant_count = 123
-
     # assemble metadata from collected information
     metadata = BeaconMetadata(
-        name="Galaxy.eu variants for {}".format(dataset.reference_name),
-        dataset_id="galaxy-{}".format(dataset.reference_name.lower()),
+        name=f"Galaxy.eu variants for {dataset.reference_name}",
+        dataset_id=f"galaxy-{dataset.reference_name.lower()}",
         description="variants shared by galaxy.eu users",
         assembly_id=dataset.reference_name,
         external_url="usegalaxy.eu",
         access_type="PUBLIC",
         create_date_time=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         update_date_time=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        call_count=call_count,
+        call_count=0,
         version="v0.1",
-        variant_count=variant_count
+        variant_count=0 # the variant count will be updated after all datasets have been processed 
     )
 
     with open(output_path, 'w', encoding='utf-8') as f:
@@ -444,7 +452,7 @@ def download_dataset(gi: GalaxyInstance, dataset: GalaxyDataset, filename: str) 
         gi.datasets.download_dataset(dataset.id, filename, use_default_filename=False)
     except Exception as e:
         # TODO catch exceptions
-        logging.critical("something went wrong while downloading file - {}".format(e))
+        logging.critical(f"something went wrong while downloading file - {e}")
 
 
 def beacon_import(dataset_file: str, metadata_file: str) -> None:
@@ -477,11 +485,11 @@ def beacon_import(dataset_file: str, metadata_file: str) -> None:
     dataset_vcf: VCF
     dataset_vcf = VCF(dataset_file)
 
-    # Insert dataset metadata into the database, prior to inserting actual variant data
+    # insert dataset metadata into the database, prior to inserting actual variant data
     dataset_id = loop.run_until_complete(db.load_metadata(dataset_vcf, metadata_file, dataset_file))
 
-    # Insert data into the database
-    # Setting "min_ac=0" instead of the default "min_ac=1" to work around a bug in load_datafile
+    # insert data into the database
+    # setting "min_ac=0" instead of the default "min_ac=1" to prevent "pop from empty list" errors
     loop.run_until_complete(db.load_datafile(dataset_vcf, dataset_file, dataset_id, min_ac=0))
 
 
@@ -509,7 +517,16 @@ async def persist_variant_origins(dataset_id: str, dataset: VCF, record):
     for variant in dataset:
         for alt in variant.ALT:
             for index in await db.get_variant_indices(variant.start, variant.REF, alt):
-                record.write("{} {}\n".format(index, dataset_id))
+                record.write(f"{index} {dataset_id}\n")
+
+
+async def update_variant_counts():
+    """
+    asd
+    """
+
+    await db.update_dataset_counts()
+
 
 
 def cleanup(dataset_file: str, metadata_file: str):
@@ -558,11 +575,11 @@ def command_rebuild(args: Namespace):
     for history_id in get_beacon_histories(gi):
         for dataset in get_datasets(gi, history_id):
             # dataset import happens here
-            logging.info("next file is {}".format(dataset.name))
+            logging.info(f"next file is {dataset.name}")
 
             # destination paths for downloaded dataset and metadata
-            dataset_file = "/tmp/dataset-{}".format(dataset.uuid)
-            metadata_file = "/tmp/metadata-{}".format(dataset.uuid)
+            dataset_file = f"/tmp/dataset-{dataset.uuid}"
+            metadata_file = f"/tmp/metadata-{dataset.uuid}"
 
             # download dataset from galaxy
             download_dataset(gi, dataset, dataset_file)
@@ -574,10 +591,17 @@ def command_rebuild(args: Namespace):
             if args.store_origins:
                 loop.run_until_complete(persist_variant_origins(dataset.id, VCF(dataset_file), variant_origins_file))
 
+    # calculate variant counts
+    logging.info("Setting variant counts")
+    loop.run_until_complete(update_variant_counts())
+
 
 def command_search(args: Namespace):
     """
+    Searches a variant (as specified in command line args) across all datasets
 
+    Note:
+        This will download each dataset
     """
     gi = set_up_galaxy_instance(args.galaxy_url, args.galaxy_key)
 
@@ -586,7 +610,7 @@ def command_search(args: Namespace):
     for history_id in get_beacon_histories(gi):
         for dataset in get_datasets(gi, history_id):
 
-            dataset_file = "/tmp/searching-{}".format(dataset.uuid)
+            dataset_file = f"/tmp/searching-{dataset.uuid}"
             download_dataset(gi, dataset, dataset_file)
 
             dataset_vcf: VCF
@@ -607,7 +631,6 @@ def main():
     """
     args = parse_arguments()
 
-    print(type(args))
     set_up_logging(args.verbosity)
 
     if args.command == "rebuild":
