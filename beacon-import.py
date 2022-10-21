@@ -224,7 +224,7 @@ def get_beacon_histories(gi: GalaxyInstance) -> List[str]:
 
     # get histories from galaxy api
     # URL is used because the name filter is not supported by bioblend as of now
-    response: Response = gi.make_get_request(f"{gi.base_url}/api/histories?q=name&qv=___BEACON_PICKUP___&all=true")
+    response: Response = gi.make_get_request(f"{gi.base_url}/api/histories?q=name&qv=___BEACON_PICKUP___&all=true&deleted=false")
 
     # check if the reuest was successful
     if response.status_code != 200:
@@ -316,7 +316,7 @@ def get_datasets(gi: GalaxyInstance, history_id: str) -> List[GalaxyDataset]:
         api_dataset_list = gi.datasets.get_datasets(
             history_id=history_id,
             deleted=False,
-            # extension=["vcf"],
+            extension=["vcf", "vcf_bgzip"],
             limit=limit,
             offset=offset
         )
