@@ -126,6 +126,18 @@ def parse_arguments() -> Namespace:
     parser_rebuild.add_argument("-o", "--origins-file", type=str, metavar="", default="/tmp/variant-origins.txt",
                                 dest="origins_file",
                                 help="full file path of where variant origins should be stored (if enabled)")
+    
+    # database connection
+    parser_rebuild.add_argument("-H", "--db-host", type=str, metavar="", default="localhost", dest="database_host",
+                                help="hostname/IP of the beacon database")
+    parser_rebuild.add_argument("-P", "--db-port", type=str, metavar="", default="5432", dest="database_port",
+                                help="port of the beacon database")
+    parser_rebuild.add_argument("-U", "--db-user", type=str, metavar="", default="beacon", dest="database_user",
+                                help="login user for the beacon database")
+    parser_rebuild.add_argument("-W", "--db-password", type=str, metavar="", default="beacon", dest="database_password",
+                                help="login password for the beacon database")
+    parser_rebuild.add_argument("-N", "--db-name", type=str, metavar="", default="beacondb", dest="database_name",
+                                help="name of the beacon database")
 
     # sub-parser for command search
     parser_search = subparsers.add_parser('search')
@@ -224,7 +236,7 @@ def get_beacon_histories(gi: GalaxyInstance) -> List[str]:
 
     # get histories from galaxy api
     # URL is used because the name filter is not supported by bioblend as of now
-    response: Response = gi.make_get_request(f"{gi.base_url}/api/histories?q=name&qv=___BEACON_PICKUP___&all=true&deleted=false")
+    response: Response = gi.make_get_request(f"{gi.base_url}/api/histories?q=name&qv=Beacon%20Export%20%F0%9F%93%A1&all=true&deleted=false")
 
     # check if the reuest was successful
     if response.status_code != 200:
@@ -554,8 +566,15 @@ def command_rebuild(args: Namespace):
     global db
     gi = set_up_galaxy_instance(args.galaxy_url, args.galaxy_key)
 
-    # connect to beacons database
     loop = asyncio.get_event_loop()
+
+    # connect to beacons database
+    os.environ['DATABASE_URL'] = args.database_host
+    os.environ['DATABASE_PORT'] = args.database_port
+    os.environ['DATABASE_USER'] = args.database_user
+    os.environ['DATABASE_PASSWORD'] = args.database_password
+    os.environ['DATABASE_NAME'] = args.database_name
+
     loop.run_until_complete(db.connection())
 
     # delete all data before the new import
