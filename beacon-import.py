@@ -171,6 +171,17 @@ def set_up_logging(verbosity: int):
         logging.basicConfig(level=logging.WARN)
 
 
+def string_as_bool(string: Any) -> bool:
+    """
+    Returns the bool value corresponding to the given value
+
+    used to typesave the api responses
+    """
+    if str(string).lower() in ("true", "yes", "on", "1"):
+        return True
+    else:
+        return False
+
 def set_up_galaxy_instance(galaxy_url: str, galaxy_key: str) -> GalaxyInstance:
     """
     Returns a galaxy instance with the given URL and api key.
@@ -254,7 +265,7 @@ def get_beacon_histories(gi: GalaxyInstance) -> List[str]:
 
         # skip adding the history if beacon_enabled is not set for the owner account
         history_user_preferences: Dict[str, str] = user_details["preferences"]
-        if "beacon_enabled" not in history_user_preferences or history_user_preferences["beacon_enabled"] != "1":
+        if "beacon_enabled" not in history_user_preferences or not string_as_bool(history_user_preferences["beacon_enabled"]):
             continue
 
         history_ids.append(history["id"])
