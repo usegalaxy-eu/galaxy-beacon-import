@@ -441,9 +441,9 @@ def prepare_metadata_file(dataset: GalaxyDataset, output_path: str) -> None:
 
     # assemble metadata from collected information
     metadata = BeaconMetadata(
-        name=f"Galaxy.eu variants for {dataset.reference_name}",
+        name=f"Galaxy variants for {dataset.reference_name}",
         dataset_id=f"galaxy-{dataset.reference_name.lower()}",
-        description="variants shared by galaxy.eu users",
+        description="variants shared by galaxy users",
         assembly_id=dataset.reference_name,
         external_url="usegalaxy.eu",
         access_type="PUBLIC",
