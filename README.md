@@ -7,51 +7,24 @@ Utility to import variants from specific galaxy histories to a beacon instance.
 
 # Try it locally
 
-## 1. Get the right galaxy
+## 1. Set up galaxy
 
-The script needs a custom endpoint of the galaxy API which is included in the following branch
+You will need a galxy instance where you have admin privileges. You can for example clone galaxy and run it with the included `run.sh` script.
 
-    git clone -b branch url.git
-    cd galaxy
+* To select VCF files in the galaxy frontend enable the setting `enable_beacon_integration` in your galaxy.yml
+* To get api access add your email in the setting `admin_users`
 
-## 2. Create galaxy admin user
-
-The beacon import can only be run by admin users. To create an admin user follow these steps
-
-* Create a `galaxy.yml` from sample
-
-
-    cp config/galaxy.yml.sample config/galaxy.yml
-
-* Edit `config/galaxy.yml`, adding your email to `admin_users`
-
-
-    sed -i 's/#admin_users: null/admin_users: <your-email>/g' config/galaxy.yml
-
-
-
-* Start galaxy
-
-    
-    ./run.sh
-
-
-* Open galaxy in your browser and register with the same email added to `admin_users`
-
-* Go to `User -> Preferences` and select `Manage API Key`. You will see an input field and a button that reads
-`Create a new key`. Press this button and remember the key for later.
-
-## 3. Provide a dataset
+## 2. Provide a dataset
 
 Perform the following actions in your local galaxy (`http://localhost:8080`)
 
 * Log in as any user
 * Go to `User -> Preferences ` and select `Manage Beacon`
 * In the Modal, press the green button to enable beacon for this user
-* Create a history called `___BEACON_PICKUP___`
+* Use the button to switch to your beacon history
 * Upload any `.vcf` file to the history
 
-## 4. Start beacon-python
+## 3. Start beacon-python
 
 Beacon python is an implementation of beacon in python. It will be the target of the import.
 
@@ -62,7 +35,7 @@ The project also comes with a `docker-compose.yml` so starting a local instance 
     docker-compose up -d
 
 
-## 6. Prepare import script
+## 4. Prepare import script
 
 Thus far the script has been tested under `Python 3.8.10`. It requires some modules that can be installed from 
 requirements.txt.
@@ -71,6 +44,6 @@ requirements.txt.
     cd galaxy-beacon-import
     pip3 install -r requirements.txt
     
-## 7. Run the import
+## 5. Run the import
 
     ./beacon-import.py -k <api-key-from-step-2>
