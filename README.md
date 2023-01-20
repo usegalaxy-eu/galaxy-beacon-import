@@ -1,9 +1,8 @@
-# galaxy-beacon-import
+# Galaxy Beacon import
 
 Utility to import variants from specific galaxy histories to a beacon instance.
 
 ##
-
 
 # Try it locally
 
