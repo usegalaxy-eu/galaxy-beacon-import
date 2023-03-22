@@ -28,13 +28,19 @@ from bioblend.galaxy import GalaxyInstance
 # cyvcf2 is a vcf parser
 from cyvcf2 import VCF, Variant
 
+# Advanced Ranged quiery/ documantation 
+
+#### if you go for the elixir beacon search the new things you will see are 
+#  Filter/ if you go for the query you will fined it under dataset (individuals, biosamples, g-variants and cohorts). https://github.com/ga4gh-beacon/beacon-v2/tree/main/models/json/beacon-v2-default-model
+
+# similar to start.... they added gene ID query
 
 class BeaconExtendedDB(BeaconDB):
     """
     This class is used to hijack beacons internal database class from the "beacon_api.utils" package
     """
 
-    async def get_variant_indices(self, start: int, ref: str, alt: str) -> List[int]:
+    async def get_variant_indices(self, start: int, ref: str, alt: str, end: int) -> List[int]:
         """
         Returns database indices of all occurrences of the given variant
 
@@ -42,6 +48,8 @@ class BeaconExtendedDB(BeaconDB):
                 start (int): start position of the variant
                 ref (str): sequence in the reference
                 alt (str): sequence of the variant
+                end (int): end position of the vaiant
+                
 
             Returns:
                 list of matching indices (possibly empty)
@@ -49,7 +57,7 @@ class BeaconExtendedDB(BeaconDB):
 
         self._conn: asyncpg.Connection
         rows = await self._conn.fetch(
-            f"SELECT index FROM beacon_data_table where start={start} AND reference='{ref}' and alternate='{alt}'")
+            f"SELECT index FROM beacon_data_table where start={start} AND reference='{ref}' and alternate='{alt} and end={end}'")
         return [row["index"] for row in rows]
 
     async def clear_database(self):
@@ -141,12 +149,24 @@ def parse_arguments() -> Namespace:
 
     # sub-parser for command search
     parser_search = subparsers.add_parser('search')
-    parser_search.add_argument("-s", "--start", type=int, metavar="", dest="start", required=True,
+    parser_search.add_argument("-s", "--start", type=int, metavar="", dest="start",
                                help="start position of the searched variant")
-    parser_search.add_argument("-r", "--ref", type=str, metavar="", dest="ref", required=True,
+    parser_search.add_argument("-r", "--ref", type=str, metavar="", dest="ref",
                                help="sequence in the reference")
-    parser_search.add_argument("-a", "--alt", type=str, metavar="", dest="alt", required=True,
+    parser_search.add_argument("-a", "--alt", type=str, metavar="", dest="alt",
                                help="alternate sequence found in the variant")
+    parser_search.add_argument("-e", "--end", type=int, metavar="", dest="end",
+                               help="end position of the searched varian")
+    # sub-parser for command search
+    parser_search.add_argument("-g", "--geneid", type=str, metavar="", dest="geneId",
+                               help="gene ID")
+    parser_search.add_argument("-m", "--var-max-length", type=int, metavar="", dest="variantMaxLength",
+                               help="")
+    parser_search.add_argument("-v", "--variant-type", type=str, metavar="", dest="variantType", choices=['unspecified', 'del', 'del:me', 'ins', 'ins:me', 'dup', 'dup:tandem', 'ins', 'inv', 'cnv', 'snp', 'mnp']
+                               help="type of the variation (Unspecified, DEL, DEL:ME, INS, INS:ME, DUP, DUP:TANDEM, INS, INV, CNV, SNP, MNP) [default:Unspecified]")
+    # filter
+    parser_search.add_argument("-t", "--entry-types", type=str, metavar="", dest="entry_types", choices=['analysis', 'biosamples', 'cohorts', 'datasets', 'genomicVariations', 'individuals', 'runs']
+                               help="type of the data (analyses, biosamples, cohorts, datasets, genomicVariations, individuals, runs) [default:individuals]")
 
     return parser.parse_args()
 
