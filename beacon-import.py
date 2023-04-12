@@ -24,23 +24,16 @@ import asyncpg
 from beacon_api.utils.db_load import BeaconDB
 from requests import Response
 from bioblend.galaxy import GalaxyInstance
-
-# cyvcf2 is a vcf parser
-from cyvcf2 import VCF, Variant
-
-# Advanced Ranged quiery/ documantation 
-
-#### if you go for the elixir beacon search the new things you will see are 
-#  Filter/ if you go for the query you will fined it under dataset (individuals, biosamples, g-variants and cohorts). https://github.com/ga4gh-beacon/beacon-v2/tree/main/models/json/beacon-v2-default-model
-
-# similar to start.... they added gene ID query
+from pymongo import MongoClient
+import conf
+import json
 
 class BeaconExtendedDB(BeaconDB):
     """
     This class is used to hijack beacons internal database class from the "beacon_api.utils" package
     """
 
-    async def get_variant_indices(self, start: int, ref: str, alt: str, end: int) -> List[int]:
+    async def get_variant_indices(self, start: int, ref: str, alt: str) -> List[int]:
         """
         Returns database indices of all occurrences of the given variant
 
@@ -48,8 +41,6 @@ class BeaconExtendedDB(BeaconDB):
                 start (int): start position of the variant
                 ref (str): sequence in the reference
                 alt (str): sequence of the variant
-                end (int): end position of the vaiant
-                
 
             Returns:
                 list of matching indices (possibly empty)
@@ -57,7 +48,7 @@ class BeaconExtendedDB(BeaconDB):
 
         self._conn: asyncpg.Connection
         rows = await self._conn.fetch(
-            f"SELECT index FROM beacon_data_table where start={start} AND reference='{ref}' and alternate='{alt} and end={end}'")
+            f"SELECT index FROM beacon_data_table where start={start} AND reference='{ref}' and alternate='{alt}'")
         return [row["index"] for row in rows]
 
     async def clear_database(self):
@@ -136,37 +127,27 @@ def parse_arguments() -> Namespace:
                                 help="full file path of where variant origins should be stored (if enabled)")
     
     # database connection
-    parser_rebuild.add_argument("-H", "--db-host", type=str, metavar="", default="localhost", dest="database_host",
+    parser_rebuild.add_argument("-A", "--conf-auth-source", type=str, metavar="", default="admin", dest="database_auth_source",
+                                help="auth source for the beacon database")
+    parser_rebuild.add_argument("-H", "--conf-host", type=str, metavar="", default="127.0.0.1", dest="database_host",
                                 help="hostname/IP of the beacon database")
-    parser_rebuild.add_argument("-P", "--db-port", type=str, metavar="", default="5432", dest="database_port",
+    parser_rebuild.add_argument("-P", "--conf-port", type=str, metavar="", default="27017", dest="database_port",
                                 help="port of the beacon database")
-    parser_rebuild.add_argument("-U", "--db-user", type=str, metavar="", default="beacon", dest="database_user",
+    parser_rebuild.add_argument("-U", "--conf-user", type=str, metavar="", default="root", dest="database_user",
                                 help="login user for the beacon database")
-    parser_rebuild.add_argument("-W", "--db-password", type=str, metavar="", default="beacon", dest="database_password",
+    parser_rebuild.add_argument("-W", "--conf-password", type=str, metavar="", default="example", dest="database_password",
                                 help="login password for the beacon database")
-    parser_rebuild.add_argument("-N", "--db-name", type=str, metavar="", default="beacondb", dest="database_name",
+    parser_rebuild.add_argument("-N", "--conf-name", type=str, metavar="", default="beacon", dest="database_name",
                                 help="name of the beacon database")
 
     # sub-parser for command search
     parser_search = subparsers.add_parser('search')
-    parser_search.add_argument("-s", "--start", type=int, metavar="", dest="start",
+    parser_search.add_argument("-s", "--start", type=int, metavar="", dest="start", required=True,
                                help="start position of the searched variant")
-    parser_search.add_argument("-r", "--ref", type=str, metavar="", dest="ref",
+    parser_search.add_argument("-r", "--ref", type=str, metavar="", dest="ref", required=True,
                                help="sequence in the reference")
-    parser_search.add_argument("-a", "--alt", type=str, metavar="", dest="alt",
+    parser_search.add_argument("-a", "--alt", type=str, metavar="", dest="alt", required=True,
                                help="alternate sequence found in the variant")
-    parser_search.add_argument("-e", "--end", type=int, metavar="", dest="end",
-                               help="end position of the searched varian")
-    # sub-parser for command search
-    parser_search.add_argument("-g", "--geneid", type=str, metavar="", dest="geneId",
-                               help="gene ID")
-    parser_search.add_argument("-m", "--var-max-length", type=int, metavar="", dest="variantMaxLength",
-                               help="")
-    parser_search.add_argument("-v", "--variant-type", type=str, metavar="", dest="variantType", choices=['unspecified', 'del', 'del:me', 'ins', 'ins:me', 'dup', 'dup:tandem', 'ins', 'inv', 'cnv', 'snp', 'mnp']
-                               help="type of the variation (Unspecified, DEL, DEL:ME, INS, INS:ME, DUP, DUP:TANDEM, INS, INV, CNV, SNP, MNP) [default:Unspecified]")
-    # filter
-    parser_search.add_argument("-t", "--entry-types", type=str, metavar="", dest="entry_types", choices=['analysis', 'biosamples', 'cohorts', 'datasets', 'genomicVariations', 'individuals', 'runs']
-                               help="type of the data (analyses, biosamples, cohorts, datasets, genomicVariations, individuals, runs) [default:individuals]")
 
     return parser.parse_args()
 
@@ -498,45 +479,51 @@ def download_dataset(gi: GalaxyInstance, dataset: GalaxyDataset, filename: str) 
         logging.critical(f"something went wrong while downloading file - {e}")
 
 
-def beacon_import(dataset_file: str, metadata_file: str) -> None:
+
+def import_to_mongodb(BFF_files):
     """
     Import a dataset to beacon
 
         Parameters:
-            dataset_file (str): full path to the dataset file
-            metadata_file (str): full path to a file containing matching metadata for the dataset
-                metadata should be in BeaconMetadata format
+            BFF_files (str): full path to the Deacon frindly files
 
         Returns:
             Nothing
 
         Note:
-            This function uses BeaconDB from the beacon-python package found at https://github.com/CSCfi/beacon-python
+            This function uses MongoDB from the beacon2-ri-api package found at https://github.com/EGA-archive/beacon2-ri-api/tree/master/deploy
 
-            The connection settings are configured by ENVIRONMENT_VARIABLE or  "default value" if not set
+            The connection settings are configured by ENVIRONMENT_VARIABLE or  "default value" if not set (not sure about the values need to check)
 
-                host: DATABASE_URL / "localhost",
-                port: DATABASE_PORT / "5432",
-                user: DATABASE_USER / beacon",
+                host: DATABASE_URL / "???",
+                port: DATABASE_PORT / "???",
+                user: DATABASE_USER / ???",
                 password: DATABASE_PASSWORD / beacon",
-                database: DATABASE_NAME / beacondb",
+                database: DATABASE_NAME / mongodb",
 
     """
-    loop = asyncio.get_event_loop()
-    global db
 
-    dataset_vcf: VCF
-    dataset_vcf = VCF(dataset_file)
-
-    # insert dataset metadata into the database, prior to inserting actual variant data
-    dataset_id = loop.run_until_complete(db.load_metadata(dataset_vcf, metadata_file, dataset_file))
-
-    # insert data into the database
-    # setting "min_ac=0" instead of the default "min_ac=1" to prevent "pop from empty list" errors
-    loop.run_until_complete(db.load_datafile(dataset_vcf, dataset_file, dataset_id, min_ac=0))
+    # Create indexes
+    client.beacon.analyses.create_index([("$**", "text")])
+    client.beacon.biosamples.create_index([("$**", "text")])
+    client.beacon.cohorts.create_index([("$**", "text")])
+    client.beacon.datasets.create_index([("$**", "text")])
+    client.beacon.genomicVariations.create_index([("$**", "text")])
+    client.beacon.individuals.create_index([("$**", "text")])
+    client.beacon.runs.create_index([("$**", "text")])
 
 
-async def persist_variant_origins(dataset_id: str, dataset: VCF, record):
+
+    # Import  BFF files
+    for BFF_file in BFF_files:
+        with open(BFF_file) as f:
+            data = json.load(f)
+            collection_name = BFF_file.split(".")[0]
+            client.beacon[collection_name].insert_many(data)
+
+
+
+#async def persist_variant_origins(dataset_id: str, dataset: VCF, record):
     """
     Maps dataset_id to variant index in a separate file (which is hard-coded)
 
@@ -556,11 +543,11 @@ async def persist_variant_origins(dataset_id: str, dataset: VCF, record):
             Nothing.
     """
 
-    variant: Variant
-    for variant in dataset:
-        for alt in variant.ALT:
-            for index in await db.get_variant_indices(variant.start, variant.REF, alt):
-                record.write(f"{index} {dataset_id}\n")
+#    variant: Variant
+#    for variant in dataset:
+#        for alt in variant.ALT:
+#            for index in await db.get_variant_indices(variant.start, variant.REF, alt):
+#                record.write(f"{index} {dataset_id}\n")
 
 
 async def update_variant_counts():
@@ -597,16 +584,19 @@ def command_rebuild(args: Namespace):
     global db
     gi = set_up_galaxy_instance(args.galaxy_url, args.galaxy_key)
 
-    loop = asyncio.get_event_loop()
+    client = MongoClient(
 
-    # connect to beacons database
-    os.environ['DATABASE_URL'] = args.database_host
-    os.environ['DATABASE_PORT'] = args.database_port
-    os.environ['DATABASE_USER'] = args.database_user
-    os.environ['DATABASE_PASSWORD'] = args.database_password
-    os.environ['DATABASE_NAME'] = args.database_name
+    # connect to MongoDB database
+    "mongodb://{}:{}@{}:{}/{}?authSource={}".format(
+    conf.args.database_usr,
+    conf.args.database_password,
+    conf.args.database_host,
+    conf.args.database_port,
+    conf.args.database_name,
+    conf.args.database_auth_source,
+        )
+    )
 
-    loop.run_until_complete(db.connection())
 
     # delete all data before the new import
     loop.run_until_complete(db.clear_database())
