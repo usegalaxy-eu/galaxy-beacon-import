@@ -24,9 +24,10 @@ import asyncpg
 from beacon_api.utils.db_load import BeaconDB
 from requests import Response
 from bioblend.galaxy import GalaxyInstance
-from pymongo import MongoClient
-import conf
-import json
+
+# cyvcf2 is a vcf parser
+from cyvcf2 import VCF, Variant
+
 
 class BeaconExtendedDB(BeaconDB):
     """
@@ -127,17 +128,15 @@ def parse_arguments() -> Namespace:
                                 help="full file path of where variant origins should be stored (if enabled)")
     
     # database connection
-    parser_rebuild.add_argument("-A", "--conf-auth-source", type=str, metavar="", default="admin", dest="database_auth_source",
-                                help="auth source for the beacon database")
-    parser_rebuild.add_argument("-H", "--conf-host", type=str, metavar="", default="127.0.0.1", dest="database_host",
+    parser_rebuild.add_argument("-H", "--db-host", type=str, metavar="", default="localhost", dest="database_host",
                                 help="hostname/IP of the beacon database")
-    parser_rebuild.add_argument("-P", "--conf-port", type=str, metavar="", default="27017", dest="database_port",
+    parser_rebuild.add_argument("-P", "--db-port", type=str, metavar="", default="5432", dest="database_port",
                                 help="port of the beacon database")
-    parser_rebuild.add_argument("-U", "--conf-user", type=str, metavar="", default="root", dest="database_user",
+    parser_rebuild.add_argument("-U", "--db-user", type=str, metavar="", default="beacon", dest="database_user",
                                 help="login user for the beacon database")
-    parser_rebuild.add_argument("-W", "--conf-password", type=str, metavar="", default="example", dest="database_password",
+    parser_rebuild.add_argument("-W", "--db-password", type=str, metavar="", default="beacon", dest="database_password",
                                 help="login password for the beacon database")
-    parser_rebuild.add_argument("-N", "--conf-name", type=str, metavar="", default="beacon", dest="database_name",
+    parser_rebuild.add_argument("-N", "--db-name", type=str, metavar="", default="beacondb", dest="database_name",
                                 help="name of the beacon database")
 
     # sub-parser for command search
@@ -479,51 +478,45 @@ def download_dataset(gi: GalaxyInstance, dataset: GalaxyDataset, filename: str) 
         logging.critical(f"something went wrong while downloading file - {e}")
 
 
-
-def import_to_mongodb(BFF_files):
+def beacon_import(dataset_file: str, metadata_file: str) -> None:
     """
     Import a dataset to beacon
 
         Parameters:
-            BFF_files (str): full path to the Deacon frindly files
+            dataset_file (str): full path to the dataset file
+            metadata_file (str): full path to a file containing matching metadata for the dataset
+                metadata should be in BeaconMetadata format
 
         Returns:
             Nothing
 
         Note:
-            This function uses MongoDB from the beacon2-ri-api package found at https://github.com/EGA-archive/beacon2-ri-api/tree/master/deploy
+            This function uses BeaconDB from the beacon-python package found at https://github.com/CSCfi/beacon-python
 
-            The connection settings are configured by ENVIRONMENT_VARIABLE or  "default value" if not set (not sure about the values need to check)
+            The connection settings are configured by ENVIRONMENT_VARIABLE or  "default value" if not set
 
-                host: DATABASE_URL / "???",
-                port: DATABASE_PORT / "???",
-                user: DATABASE_USER / ???",
+                host: DATABASE_URL / "localhost",
+                port: DATABASE_PORT / "5432",
+                user: DATABASE_USER / beacon",
                 password: DATABASE_PASSWORD / beacon",
-                database: DATABASE_NAME / mongodb",
+                database: DATABASE_NAME / beacondb",
 
     """
+    loop = asyncio.get_event_loop()
+    global db
 
-    # Create indexes
-    client.beacon.analyses.create_index([("$**", "text")])
-    client.beacon.biosamples.create_index([("$**", "text")])
-    client.beacon.cohorts.create_index([("$**", "text")])
-    client.beacon.datasets.create_index([("$**", "text")])
-    client.beacon.genomicVariations.create_index([("$**", "text")])
-    client.beacon.individuals.create_index([("$**", "text")])
-    client.beacon.runs.create_index([("$**", "text")])
+    dataset_vcf: VCF
+    dataset_vcf = VCF(dataset_file)
 
+    # insert dataset metadata into the database, prior to inserting actual variant data
+    dataset_id = loop.run_until_complete(db.load_metadata(dataset_vcf, metadata_file, dataset_file))
 
-
-    # Import  BFF files
-    for BFF_file in BFF_files:
-        with open(BFF_file) as f:
-            data = json.load(f)
-            collection_name = BFF_file.split(".")[0]
-            client.beacon[collection_name].insert_many(data)
+    # insert data into the database
+    # setting "min_ac=0" instead of the default "min_ac=1" to prevent "pop from empty list" errors
+    loop.run_until_complete(db.load_datafile(dataset_vcf, dataset_file, dataset_id, min_ac=0))
 
 
-
-#async def persist_variant_origins(dataset_id: str, dataset: VCF, record):
+async def persist_variant_origins(dataset_id: str, dataset: VCF, record):
     """
     Maps dataset_id to variant index in a separate file (which is hard-coded)
 
@@ -543,11 +536,11 @@ def import_to_mongodb(BFF_files):
             Nothing.
     """
 
-#    variant: Variant
-#    for variant in dataset:
-#        for alt in variant.ALT:
-#            for index in await db.get_variant_indices(variant.start, variant.REF, alt):
-#                record.write(f"{index} {dataset_id}\n")
+    variant: Variant
+    for variant in dataset:
+        for alt in variant.ALT:
+            for index in await db.get_variant_indices(variant.start, variant.REF, alt):
+                record.write(f"{index} {dataset_id}\n")
 
 
 async def update_variant_counts():
@@ -584,19 +577,16 @@ def command_rebuild(args: Namespace):
     global db
     gi = set_up_galaxy_instance(args.galaxy_url, args.galaxy_key)
 
-    client = MongoClient(
+    loop = asyncio.get_event_loop()
 
-    # connect to MongoDB database
-    "mongodb://{}:{}@{}:{}/{}?authSource={}".format(
-    conf.args.database_usr,
-    conf.args.database_password,
-    conf.args.database_host,
-    conf.args.database_port,
-    conf.args.database_name,
-    conf.args.database_auth_source,
-        )
-    )
+    # connect to beacons database
+    os.environ['DATABASE_URL'] = args.database_host
+    os.environ['DATABASE_PORT'] = args.database_port
+    os.environ['DATABASE_USER'] = args.database_user
+    os.environ['DATABASE_PASSWORD'] = args.database_password
+    os.environ['DATABASE_NAME'] = args.database_name
 
+    loop.run_until_complete(db.connection())
 
     # delete all data before the new import
     loop.run_until_complete(db.clear_database())
