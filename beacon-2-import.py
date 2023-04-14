@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-"""Pushes genomic variant information from a galaxy to a beacon instance.
-
-Usage:
-    ./beacon-push.py
-"""
-
 import argparse
 import asyncio
 import datetime
@@ -20,13 +13,13 @@ from argparse import Namespace
 # pip install git+https://github.com/CSCfi/beacon-python
 #
 # TODO can we install it like this
-import asyncpg
-from db_load import BeaconDB
+# import asyncpg
+# from db_load import BeaconDB
 from requests import Response
 from bioblend.galaxy import GalaxyInstance
 
 # cyvcf2 is a vcf parser
-from cyvcf2 import VCF, Variant
+# from cyvcf2 import VCF, Variant
 
 from pymongo import MongoClient
 import conf
@@ -51,77 +44,42 @@ class BeaconExtendedDB:
             )
         )
     async def createCollection(self):
-        self.client.beacon.createCollection("analyses")
-        self.client.beacon.createCollection("biosamples")
-        self.client.beacon.createCollection("cohorts")
-        self.client.beacon.createCollection("datasets")
-        self.client.beacon.createCollection("genomicVariations")
-        self.client.beacon.createCollection("individuals")
-        self.client.beacon.createCollection("runs")
+
+        names=["analyses","biosamples","cohorts","cohorts","datasets","genomicVariations","individuals","runs"]
+        existing_names=self.client.beacon.list_collection_names()
+        for name in names:
+            if name not in existing_names:
+                self.client.beacon.createCollection(name)
+                # Create Collections
+                # self.client.beacon.createCollection("analyses")
+                # self.client.beacon.createCollection("biosamples")
+                # self.client.beacon.createCollection("cohorts")
+                # self.client.beacon.createCollection("datasets")
+                # self.client.beacon.createCollection("genomicVariations")
+                # self.client.beacon.createCollection("individuals")
+                # self.client.beacon.createCollection("runs")
+                self.client.beacon.beacon[name].create_index([("$**", "text")])
+                # Create indexes
+                # self.client.beacon.analyses.create_index([("$**", "text")])
+                # self.client.beacon.biosamples.create_index([("$**", "text")])
+                # self.client.beacon.cohorts.create_index([("$**", "text")])
+                # self.client.beacon.datasets.create_index([("$**", "text")])
+                # self.client.beacon.genomicVariations.create_index([("$**", "text")])
+                # self.client.beacon.individuals.create_index([("$**", "text")])
+                # self.client.beacon.runs.create_index([("$**", "text")])
 
     async def clear_database(self):
-        pass
+        db.client.beacon.analyses.delete_many({})
+        db.client.beacon.biosamples.delete_many({})
+        db.client.beacon.cohorts.delete_many({})
+        db.client.beacon.datasets.delete_many({})
+        db.client.beacon.genomicVariations.delete_many({})
+        db.client.beacon.individuals.delete_many({})
+        db.client.beacon.runs.delete_many({})
 
     async def update_dataset_counts(self):
         pass
-# class BeaconExtendedDB(BeaconDB):
-#     """
-#     This class is used to hijack beacons internal database class from the "beacon_api.utils" package
-#     """
-#
-#     async def get_variant_indices(self, start: int, ref: str, alt: str) -> List[int]:
-#         """
-#         Returns database indices of all occurrences of the given variant
-#
-#             Parameters:
-#                 start (int): start position of the variant
-#                 ref (str): sequence in the reference
-#                 alt (str): sequence of the variant
-#
-#             Returns:
-#                 list of matching indices (possibly empty)
-#         """
-#
-#         self._conn: asyncpg.Connection
-#         rows = await self._conn.fetch(
-#             f"SELECT index FROM beacon_data_table where start={start} AND reference='{ref}' and alternate='{alt}'")
-#         return [row["index"] for row in rows]
-#
-#     async def clear_database(self):
-#         """
-#         Removes all data from beacons internal database
-#
-#         The database schema will remain unchanged
-#         """
-#         await self._conn.execute("DELETE FROM beacon_data_table")
-#         await self._conn.execute("DELETE FROM beacon_dataset_table")
-#         await self._conn.execute("DELETE FROM beacon_dataset_counts_table")
-#
-#     async def update_dataset_counts(self):
-#         """
-#         Calculates and sets actual counts for the accumulated datasets
-#
-#             Parameters:
-#                 None
-#
-#             Returns:
-#                 Nothing
-#         """
-#         records: List[asyncpg.Record] = await self._conn.fetch(
-#             "SELECT datasetid, COUNT(*) as count, SUM(callcount) as callcount FROM beacon_data_table GROUP BY datasetid")
-#
-#         # clear beacon_dataset_counts table
-#         # beacon_init function will add multiple lines for the same dataset, one for each file that is imported
-#         await self._conn.execute("DELETE FROM beacon_dataset_counts_table")
-#
-#         # persist the actual count values
-#         for dataset in records:
-#             await self._conn.execute(
-#                 f"INSERT INTO beacon_dataset_counts_table(datasetid, callcount, variantcount) " +
-#                 f"VALUES('{dataset['datasetid']}', {dataset['count']}, {dataset['callcount']})")
-#
-#         # hide the sample count
-#         await self._conn.execute("UPDATE beacon_dataset_table SET samplecount = NULL")
+
 
 
 # global variable for beacon connection
@@ -427,78 +385,6 @@ def get_datasets(gi: GalaxyInstance, history_id: str) -> List[GalaxyDataset]:
     return datasets
 
 
-@dataclass
-class BeaconMetadata:
-    """
-    Dataset metadata to be consumed by beacon during import.
-
-    All metadate fields will be accessible via beacons api. Given values should be ones that can
-    shared without exposing too much information (i.e. do not expose internal galaxy IDs, real filenames, etc)
-
-        Attributes:
-            name (string): The name for the dataset
-            dataset_id (string): Unique identifier for the dataset - any string may be given
-            description (string): A short description of the dataset
-            assembly_id (string): Identifier of the reference genome used to calculate the variants
-            external_url (string): URL will be returned by beacon api along with matching variants from this dataset
-            access_type (string): beacon supports CONTROLLED, REGISTERED, PUBLIC
-                TODO... other attributes
-    """
-    name: str
-    dataset_id: str
-    description: str
-    assembly_id: str
-    external_url: str
-    access_type: str
-    create_date_time: str
-    update_date_time: str
-    call_count: int
-    version: str
-    variant_count: int
-
-    def __json__(self) -> str:
-        """
-        Returns metadata json, converting snake_case attribute names to camelCase
-        """
-        data = {}
-        # looping through all attributes and their values
-        for attribute, value in vars(self).items():
-            # convert attribute name to camel case (replacing _([a-z]) by upper case of the matching letter)
-            key = re.sub(r"_([a-z])", lambda x: x.group(1).upper(), attribute)
-            data[key] = value
-        return json.dumps(data)
-
-
-def prepare_metadata_file(dataset: GalaxyDataset, output_path: str) -> None:
-    """
-    Prepares a metadata file to be consumed by beacon database import scripts
-
-        Parameters:
-            dataset (GalaxyDataset): The dataset which will be described by the metadata
-            output_path (string): Full destination path for the metadata file
-
-        Returns:
-            True if the metadata file has been written and False if ..
-    """
-
-    # assemble metadata from collected information
-    metadata = BeaconMetadata(
-        name=f"Galaxy variants for {dataset.reference_name}",
-        dataset_id=f"galaxy-{dataset.reference_name.lower()}",
-        description="variants shared by galaxy users",
-        assembly_id=dataset.reference_name,
-        external_url="usegalaxy.eu",
-        access_type="PUBLIC",
-        create_date_time=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        update_date_time=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        call_count=0,
-        version="v0.1",
-        variant_count=0  # the variant count will be updated after all datasets have been processed
-    )
-
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(metadata.__json__())
-
 
 def download_dataset(gi: GalaxyInstance, dataset: GalaxyDataset, filename: str) -> None:
     """
@@ -551,16 +437,16 @@ def import_to_mongodb(BFF_files: list):
         with open(BFF_files[i]) as f:
             data = json.load(f)
             collection_name = Entities[i].split("_")[0]
-            db.client.beacon[collection_name].insert_many(data)
+            db.client.beacon.beacon[collection_name].insert_many(data)
 
-        # Create indexes
-    db.client.beacon.analyses.create_index([("$**", "text")])
-    db.client.beacon.biosamples.create_index([("$**", "text")])
-    db.client.beacon.cohorts.create_index([("$**", "text")])
-    db.client.beacon.datasets.create_index([("$**", "text")])
-    db.client.beacon.genomicVariations.create_index([("$**", "text")])
-    db.client.beacon.individuals.create_index([("$**", "text")])
-    db.client.beacon.runs.create_index([("$**", "text")])
+    #     # Create indexes
+    # db.client.beacon.analyses.create_index([("$**", "text")])
+    # db.client.beacon.biosamples.create_index([("$**", "text")])
+    # db.client.beacon.cohorts.create_index([("$**", "text")])
+    # db.client.beacon.datasets.create_index([("$**", "text")])
+    # db.client.beacon.genomicVariations.create_index([("$**", "text")])
+    # db.client.beacon.individuals.create_index([("$**", "text")])
+    # db.client.beacon.runs.create_index([("$**", "text")])
 
 
 async def persist_variant_origins(dataset_id: str, dataset: str, record):
@@ -583,13 +469,13 @@ async def persist_variant_origins(dataset_id: str, dataset: str, record):
             Nothing.
     """
     global db
-    with open('./genomicVariations.json') as j_f:
+    with open(dataset) as j_f:
         data = json.load(j_f)
         for variant in data:
             ALT = variant['alternateBases']
             start = variant['position']['start'][0]
             REF = variant['referenceBases']
-            res=db.client.genomicVariations.find({"alternateBases":ALT},{"start":start},{"referenceBases":REF})
+            res=db.client.beacon.genomicVariations.find({"alternateBases":ALT},{"start":start},{"referenceBases":REF})
             record.write(f'{res["_id"]}{dataset_id}\n')
 
 
@@ -612,8 +498,9 @@ def cleanup(dataset_file: str, metadata_file: str):
     """
     Removes given files
     """
-    os.remove(dataset_file)
-    os.remove(metadata_file)
+    # os.remove(dataset_file)
+    # os.remove(metadata_file)
+    pass
 
 
 def command_rebuild(args: Namespace):
@@ -633,7 +520,7 @@ def command_rebuild(args: Namespace):
     global db
     gi = set_up_galaxy_instance(args.galaxy_url, args.galaxy_key)
     loop.run_until_complete(db.connection())
-
+    loop.run_until_complete(db.createCollection())
     # delete all data before the new import
     loop.run_until_complete(db.clear_database())
 
@@ -667,7 +554,6 @@ def command_rebuild(args: Namespace):
             # download dataset from galaxy
             # download_dataset(gi, dataset, dataset_file)
             # prepare_metadata_file(dataset, metadata_file)
-            # BFF_files = [analyses_file, biosamples_file, cohorts_file, datasets_file, genomicVariations_file, individuals_file, runs_file]
             import_to_mongodb(BFF_files)
 
             # save the origin of the variants in beacon database
@@ -676,8 +562,8 @@ def command_rebuild(args: Namespace):
                 # loop.run_until_complete(persist_variant_origins(dataset.id, VCF(dataset_file), variant_origins_file))
 
     # calculate variant counts
-    logging.info("Setting variant counts")
-    loop.run_until_complete(update_variant_counts())
+    # logging.info("Setting variant counts")
+    # loop.run_until_complete(update_variant_counts())
 
 
 def command_search(args: Namespace):
@@ -693,18 +579,8 @@ def command_search(args: Namespace):
     # load data from beacon histories
     for history_id in get_beacon_histories(gi):
         for dataset in get_datasets(gi, history_id):
-
-            analyses_file = f"/tmp/analyses-{dataset.uuid}"
-            biosamples_file = f"/tmp/biosamples-{dataset.uuid}"
-            cohorts_file = f"/tmp/cohorts-{dataset.uuid}"
-            datasets_file = f"/tmp/ datasets-{dataset.uuid}"
             genomicVariations_file = f"/tmp/genomicVariations-{dataset.uuid}"
-            individuals_file = f"/tmp/individuals-{dataset.uuid}"
-            runs_file = f"/tmp/runs-{dataset.uuid}"
-            BFF_files = [analyses_file, biosamples_file, cohorts_file, datasets_file, genomicVariations_file, individuals_file, runs_file]
-            for dataset_file in BFF_files:
-                download_dataset(gi, dataset, dataset_file)
-
+            download_dataset(gi, dataset, genomicVariations_file)
             # dataset_vcf: VCF
             # dataset_vcf = VCF(dataset_file)
             with open(genomicVariations_file) as j_f:
@@ -721,8 +597,9 @@ def command_search(args: Namespace):
             #
             #     if variant.start == args.start and variant.REF == args.ref and args.alt in variant.ALT:
             #         print(f"found variant in dataset {dataset.id} ({dataset.name})")
-            for dataset_file in BFF_files:
-                os.remove(dataset_file)
+            # for dataset_file in BFF_files:
+            #     os.remove(dataset_file)
+            os.remove(genomicVariations_file)
 
 
 def main():
