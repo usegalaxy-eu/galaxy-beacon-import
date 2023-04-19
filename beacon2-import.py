@@ -417,7 +417,7 @@ def download_dataset(gi: GalaxyInstance, dataset: GalaxyDataset, filename: str) 
         logging.critical(f"something went wrong while downloading file - {e}")
 
 
-def import_to_mongodb(BFF_files: list):
+def import_to_mongodb(BFF_files: dict):
     """
     Import a dataset to beacon
 
@@ -444,20 +444,12 @@ def import_to_mongodb(BFF_files: list):
                 'individuals_file', 'runs_file']
     global db
     # Import  BFF files
-    for i in range(len(BFF_files)):
-        with open(BFF_files[i]) as f:
+    for key in BFF_files.keys():
+        with open(BFF_files[key]) as f:
             data = json.load(f)
-            collection_name = Entities[i].split("_")[0]
+            collection_name = key
             db.client.beacon.beacon[collection_name].insert_many(data)
 
-    #     # Create indexes
-    # db.client.beacon.analyses.create_index([("$**", "text")])
-    # db.client.beacon.biosamples.create_index([("$**", "text")])
-    # db.client.beacon.cohorts.create_index([("$**", "text")])
-    # db.client.beacon.datasets.create_index([("$**", "text")])
-    # db.client.beacon.genomicVariations.create_index([("$**", "text")])
-    # db.client.beacon.individuals.create_index([("$**", "text")])
-    # db.client.beacon.runs.create_index([("$**", "text")])
 
 
 async def persist_variant_origins(dataset_id: str, dataset: str, record):
@@ -488,14 +480,6 @@ async def persist_variant_origins(dataset_id: str, dataset: str, record):
             REF = variant['referenceBases']
             res=db.client.beacon.genomicVariations.find({"alternateBases":ALT},{"start":start},{"referenceBases":REF})
             record.write(f'{res["_id"]}{dataset_id}\n')
-
-
-    # variant: Variant
-    # for variant in dataset:
-    #     for alt in variant.ALT:
-    #         for index in await db.get_variant_indices(variant.start, variant.REF, alt):
-    #             record.write(f"{index} {dataset_id}\n")
-
 
 async def update_variant_counts():
     """
@@ -541,7 +525,7 @@ def command_rebuild(args: Namespace):
 
 
     loop.run_until_complete(db.connection())
-    loop.run_until_complete(db.createCollection())
+    # loop.run_until_complete(db.createCollection())
     # # delete all data before the new import
     loop.run_until_complete(db.clear_database())
     
@@ -557,34 +541,39 @@ def command_rebuild(args: Namespace):
 
         # open a file to store variant origins
         variant_origins_file = open(args.origins_file, "a")
-
+    path_dict={"analyses":"/tmp/analyses-","biosamples":"/tmp/biosamples-","cohorts":"/tmp/cohorts-","datasets":"/tmp/datasets-","genomicVariations":"/tmp/genomicVariations-", "individuals":"/tmp/individuals-","runs":"/tmp/runs-"}
     # load data from beacon histories
+
+    BFF_files = {}
     for history_id in get_beacon_histories(gi):
         for dataset in get_datasets(gi, history_id):
-            print(dataset)
             logging.info(f"next file is {dataset.name}")
             # destination paths for downloaded dataset and metadata
-            analyses_file = f"/tmp/analyses-{dataset.uuid}"
-            biosamples_file = f"/tmp/biosamples-{dataset.uuid}"
-            cohorts_file = f"/tmp/cohorts-{dataset.uuid}"
-            datasets_file = f"/tmp/ datasets-{dataset.uuid}"
-            genomicVariations_file = f"/tmp/genomicVariations-{dataset.uuid}"
-            individuals_file = f"/tmp/individuals-{dataset.uuid}"
-            runs_file = f"/tmp/runs-{dataset.uuid}"
+            # analyses_file = f"/tmp/analyses-{dataset.uuid}"
+            # biosamples_file = f"/tmp/biosamples-{dataset.uuid}"
+            # cohorts_file = f"/tmp/cohorts-{dataset.uuid}"
+            # datasets_file = f"/tmp/ datasets-{dataset.uuid}"
+            # genomicVariations_file = f"/tmp/genomicVariations-{dataset.uuid}"
+            # individuals_file = f"/tmp/individuals-{dataset.uuid}"
+            # runs_file = f"/tmp/runs-{dataset.uuid}"
+            name=dataset.name.split('.')[0]
+            print (name)
+            path=path_dict[name]+dataset.uuid
+            download_dataset(gi, dataset, path)
+            BFF_files[name]=path
 
-            BFF_files = [analyses_file, biosamples_file, cohorts_file, datasets_file, genomicVariations_file, individuals_file, runs_file]
-            for dataset_file in BFF_files:
-                download_dataset(gi, dataset, dataset_file)
+            # 
+            # for dataset_file in BFF_files:
+            #     download_dataset(gi, dataset, dataset_file)
 
             # download dataset from galaxy
             # download_dataset(gi, dataset, dataset_file)
             # prepare_metadata_file(dataset, metadata_file)
-            import_to_mongodb(BFF_files)
+    import_to_mongodb(BFF_files)
 
             # save the origin of the variants in beacon database
-            if args.store_origins:
-                loop.run_until_complete(persist_variant_origins(dataset.id, genomicVariations_file, variant_origins_file))
-                # loop.run_until_complete(persist_variant_origins(dataset.id, VCF(dataset_file), variant_origins_file))
+    if args.store_origins:
+        loop.run_until_complete(persist_variant_origins(dataset.id, genomicVariations_file, variant_origins_file))
 
     # calculate variant counts
     # logging.info("Setting variant counts")
@@ -600,22 +589,25 @@ def command_search(args: Namespace):
     """
     gi = set_up_galaxy_instance(args.galaxy_url, args.galaxy_key)
 
+
+    path_dict={"analyses":"/tmp/analyses-","biosamples":"/tmp/biosamples-","cohorts":"/tmp/cohorts-","datasets":"/tmp/datasets-","genomicVariations":"/tmp/genomicVariations-", "individuals":"/tmp/individuals-","runs":"/tmp/runs-"}
     print(f"searching variant {args.ref} -> {args.alt} at position {args.start} (each dot is one dataset)\n")
     # load data from beacon histories
     for history_id in get_beacon_histories(gi):
         for dataset in get_datasets(gi, history_id):
-            genomicVariations_file = f"/tmp/genomicVariations-{dataset.uuid}"
-            download_dataset(gi, dataset, genomicVariations_file)
-            # dataset_vcf: VCF
-            # dataset_vcf = VCF(dataset_file)
-            with open(genomicVariations_file) as j_f:
-                data = json.load(j_f)
-                for variant in data:
-                    ALT = variant['alternateBases']
-                    start = variant['position']['start'][0]
-                    REF = variant['referenceBases']
-                    if start == args.start and REF == args.ref and args.alt in ALT:
-                        print(f"found variant in dataset {dataset.id} ({dataset.name})")
+            name=dataset.name.split('.')[0]
+            if name == "genomicVariations":
+                genomicVariations_file = f"/tmp/genomicVariations-{dataset.uuid}"
+                download_dataset(gi, dataset, genomicVariations_file)
+                with open(genomicVariations_file) as j_f:
+                    data = json.load(j_f)
+                    for variant in data:
+                        ALT = variant['alternateBases']
+                        start = variant['position']['start'][0]
+                        REF = variant['referenceBases']
+                        if start == args.start and REF == args.ref and args.alt in ALT:
+                            print(f"found variant in dataset {dataset.id} ({dataset.name})")
+                os.remove(genomicVariations_file)
 
             # variant: Variant
             # for variant in dataset_vcf:
@@ -623,8 +615,8 @@ def command_search(args: Namespace):
             #     if variant.start == args.start and variant.REF == args.ref and args.alt in variant.ALT:
             #         print(f"found variant in dataset {dataset.id} ({dataset.name})")
             # for dataset_file in BFF_files:
-            #     os.remove(dataset_file)
-            os.remove(genomicVariations_file)
+            #     os.remove(dataset_file
+
 
 
 def main():
