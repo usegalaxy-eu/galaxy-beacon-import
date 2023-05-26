@@ -69,7 +69,7 @@ class BeaconExtendedDB:
                 # self.client.beacon.createCollection("genomicVariations")
                 # self.client.beacon.createCollection("individuals")
                 # self.client.beacon.createCollection("runs")
-                self.client.beacon.beacon[name].create_index([("$**", "text")])
+                self.client.beacon[name].create_index([("$**", "text")])
                 # Create indexes
                 # self.client.beacon.analyses.create_index([("$**", "text")])
                 # self.client.beacon.biosamples.create_index([("$**", "text")])
@@ -448,7 +448,7 @@ def import_to_mongodb(BFF_files: dict):
         with open(BFF_files[key]) as f:
             data = json.load(f)
             collection_name = key
-            db.client.beacon.beacon[collection_name].insert_many(data)
+            db.client.beacon[collection_name].insert_many(data)
 
 
 
