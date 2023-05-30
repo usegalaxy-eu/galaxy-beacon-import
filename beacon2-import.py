@@ -90,8 +90,8 @@ def parse_arguments() -> Namespace:
     subparsers.required = True
 
     # arguments controlling output
-    parser.add_argument("-v", "--verbosity", action="count", default=0,
-                        help="log verbosity, can be repeated up to three times")
+    parser.add_argument('-d', '--debug', help="Print lots of debugging statements", action="store_const", dest="loglevel", const=logging.DEBUG, default=logging.WARNING)
+    parser.add_argument('-v', '--verbose', help="Be verbose", action="store_const", dest="loglevel", const=logging.INFO)
 
     # arguments controlling galaxy connection
     parser.add_argument("-u", "--galaxy-url", type=str, metavar="", default="http://localhost:8080", dest="galaxy_url",
@@ -134,26 +134,6 @@ def parse_arguments() -> Namespace:
                                help="alternate sequence found in the variant")
 
     return parser.parse_args()
-
-
-def set_up_logging(verbosity: int):
-    """
-    Configures the logger for this script
-
-        Parameters:
-            verbosity (int):
-
-        Returns:
-            Nothing.
-    """
-
-    # configure log level to match the given verbosity
-    if verbosity > 1:
-        logging.basicConfig(level=logging.DEBUG)
-    elif verbosity == 1:
-        logging.basicConfig(level=logging.INFO)
-    else:
-        logging.basicConfig(level=logging.WARN)
 
 
 
@@ -368,7 +348,7 @@ def main():
     """
     args = parse_arguments()
 
-    set_up_logging(args.verbosity)
+    logging.basicConfig(level=args.loglevel)
 
     if args.command == "rebuild":
         command_rebuild(args)
