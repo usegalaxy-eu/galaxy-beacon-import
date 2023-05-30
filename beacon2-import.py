@@ -104,24 +104,24 @@ def parse_arguments() -> Namespace:
     parser_rebuild.add_argument("-s", "--store-origins", default=False, dest="store_origins",
                                 action="store_true",
                                 help="make a local file containing variantIDs with the dataset they stem from")
-    parser_rebuild.add_argument("-o", "--origins-file", type=str, metavar="", default="/tmp/variant-origins.txt",
+    parser_rebuild.add_argument("-o", "--origins-file", type=str, metavar="", default="",
                                 dest="origins_file",
                                 help="full file path of where variant origins should be stored (if enabled)")
 
     # database connection
-    parser_rebuild.add_argument("-A", "--conf-auth-source", type=str, metavar="admin", default="admin",
+    parser_rebuild.add_argument("-A", "--db-auth-source", type=str, metavar="admin", default="admin",
                                 dest="database_auth_source",
                                 help="auth source for the beacon database")
-    parser_rebuild.add_argument("-H", "--conf-host", type=str, metavar="", default="127.0.0.1", dest="database_host",
+    parser_rebuild.add_argument("-H", "--db-host", type=str, metavar="", default="127.0.0.1", dest="database_host",
                                 help="hostname/IP of the beacon database")
-    parser_rebuild.add_argument("-P", "--conf-port", type=str, metavar="", default="27017", dest="database_port",
+    parser_rebuild.add_argument("-P", "--db-port", type=str, metavar="", default="27017", dest="database_port",
                                 help="port of the beacon database")
-    parser_rebuild.add_argument("-U", "--conf-user", type=str, metavar="", default="root", dest="database_user",
+    parser_rebuild.add_argument("-U", "--db-user", type=str, metavar="", default="root", dest="database_user",
                                 help="login user for the beacon database")
-    parser_rebuild.add_argument("-W", "--conf-password", type=str, metavar="", default="example",
+    parser_rebuild.add_argument("-W", "--db-password", type=str, metavar="", default="example",
                                 dest="database_password",
                                 help="login password for the beacon database")
-    parser_rebuild.add_argument("-N", "--conf-name", type=str, metavar="", default="beacon", dest="database_name",
+    parser_rebuild.add_argument("-N", "--db-name", type=str, metavar="", default="beacon", dest="database_name",
                                 help="name of the beacon database")
 
     # sub-parser for command search
