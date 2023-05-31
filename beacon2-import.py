@@ -175,6 +175,7 @@ def get_datasets(gi: GalaxyInstance, history_id: str) -> List[GalaxyDataset]:
         #    "state", "extension", "purged"
         for api_dataset_list_entry in api_dataset_list:
             dataset_info = gi.datasets.show_dataset(dataset_id=api_dataset_list_entry["id"])
+
             # read dataset information from api
             try:
                 dataset = GalaxyDataset(dataset_info)
@@ -185,18 +186,18 @@ def get_datasets(gi: GalaxyInstance, history_id: str) -> List[GalaxyDataset]:
                     f"not reading dataset {api_dataset_list_entry['id']} because {e} from api response")
 
             # filter for valid human references
-            # match = re.match(r"(GRCh\d+|hg\d+).*", dataset.reference_name)
-            # if match is None:
-            #     # skip datasets with unknown references
-            #     logging.warning(
-            #         f"not reading dataset {dataset.name} with unknown reference \"{dataset.reference_name}\"")
-            #     continue
+            match = re.match(r"(GRCh\d+|hg\d+).*", dataset.reference_name)
+            if match is None:
+                # skip datasets with unknown references
+                logging.warning(
+                    f"not reading dataset {dataset.name} with unknown reference \"{dataset.reference_name}\"")
+                continue
 
             # set reference name to the first match group
             #
             # THIS WILL REMOVE PATCH LEVEL FROM THE REFERENCE
             # therefore all patch levels will be grouped under the major version of the reference
-            # dataset.reference_name = match.group(1)
+            dataset.reference_name = match.group(1)
 
             datasets.append(dataset)
         offset += limit
