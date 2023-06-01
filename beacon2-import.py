@@ -1,6 +1,6 @@
 import argparse
 import logging
-
+import re
 import os
 
 from argparse import Namespace
@@ -53,19 +53,15 @@ class BeaconDB:
 
 
     def clear_database(self):
-        try:
-            db.client.beacon.analyses.delete_many({})
-            db.client.beacon.biosamples.delete_many({})
-            db.client.beacon.cohorts.delete_many({})
-            db.client.beacon.datasets.delete_many({})
-            db.client.beacon.genomicVariations.delete_many({})
-            db.client.beacon.individuals.delete_many({})
-            db.client.beacon.runs.delete_many({})
-            return True
-        except:
-            print(f'Warning: Failed to clear database user:{self.database_user} db:{self.database_name}')
-            logging.info(f'Warning: Failed to clear database user:{self.database_user} db:{self.database_name}')
-            return False
+        existing_names = self.client.beacon.list_collection_names()
+        for name in existing_names:
+            try:
+                self.client.beacon[name].drop()
+            except:
+                print(f'Warning: Failed to clear database user:{self.database_user} db:{self.database_name}')
+                logging.info(f'Warning: Failed to clear database user:{self.database_user} db:{self.database_name}')
+                return False
+        return True
 
     def update_dataset_counts(self):
         pass
