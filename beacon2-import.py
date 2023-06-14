@@ -255,7 +255,7 @@ def import_to_mongodb(BFF_files: dict):
         try:
             with open(BFF_files[key]) as f:
                 data = json.load(f)
-                db.client.beacon[collection_name].insert_many(data)
+                db.client.beacon[key].insert_many(data)
         except:
             print(f"the downloaded file probably does not exist file name:{key} file path:{BFF_files[key]}")
             logging.info(f"the downloaded file probably does not exist file name:{key} file path:{BFF_files[key]}")
