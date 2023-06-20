@@ -43,14 +43,6 @@ class BeaconDB:
             return False
 
 
-    def createCollection(self):
-        names = ["analyses", "biosamples", "cohorts", "cohorts", "datasets", "genomicVariations", "individuals", "runs"]
-        existing_names = self.client.beacon.list_collection_names()
-        for name in names:
-            if name not in existing_names:
-                self.client.beacon.create_collection(name)
-                self.client.beacon[name].create_index([("$**", "text")])
-
 
     def clear_database(self):
         existing_names = self.client.beacon.list_collection_names()
@@ -63,8 +55,41 @@ class BeaconDB:
                 return False
         return True
 
+    def get_variant_indices(self, start: int, ref: str, alt: str,var_id:str) -> List[str]:
+        rows=self.client.beacon['genomicVariations'].find({'alternateBases':alt,'referenceBases':ref,'variantInternalId':var_id})
+        rows_l=[row for row in rows]
+        rows_res_list=[]
+        for row_dict in rows_l:
+            if row_dict['position']['start'][0]==start:
+                rows_res_list.append(row_dict)
+        return [str(row["_id"]) for row in rows_res_list]
+
+
+
+
+
+    
     def update_dataset_counts(self):
-        pass
+        """
+        Calculates and sets actual counts for the accumulated datasets
+
+            Parameters:
+                None
+            
+            Returns:
+                Nothing
+        """
+        try:
+            rows=db.client.beacon['genomicVariations'].find({})
+            count=0
+            for row in rows:
+                count+=1
+            db.client.beacon['datasets'].update_many({},{'$set':{'data_count':str(count)}})
+            return f'There are {str(count)} data'
+        except:
+            return 'There are some errors in update dataset counts'
+
+        
 
 
 db: BeaconDB = BeaconDB()
@@ -100,7 +125,7 @@ def parse_arguments() -> Namespace:
     parser_rebuild.add_argument("-s", "--store-origins", default=False, dest="store_origins",
                                 action="store_true",
                                 help="make a local file containing variantIDs with the dataset they stem from")
-    parser_rebuild.add_argument("-o", "--origins-file", type=str, metavar="", default="",
+    parser_rebuild.add_argument("-o", "--origins-file", type=str, metavar="", default="/tmp/variant-origins.txt",
                                 dest="origins_file",
                                 help="full file path of where variant origins should be stored (if enabled)")
 
@@ -226,7 +251,7 @@ def download_dataset(gi: GalaxyInstance, dataset: GalaxyDataset, filename: str) 
         logging.critical(f"something went wrong while downloading file - {e} filename:{filename}")
 
 
-def import_to_mongodb(BFF_files: dict):
+def import_to_mongodb(collection_name,datafile_path):
     """
     Import a dataset to beacon
 
@@ -248,18 +273,19 @@ def import_to_mongodb(BFF_files: dict):
                 database: DATABASE_NAME / mongodb",
 
     """
-
-
     # Import  BFF files
-    for key in BFF_files.keys():
-        try:
-            with open(BFF_files[key]) as f:
-                data = json.load(f)
-                db.client.beacon[key].insert_many(data)
-        except:
-            print(f"the downloaded file probably does not exist file name:{key} file path:{BFF_files[key]}")
-            logging.info(f"the downloaded file probably does not exist file name:{key} file path:{BFF_files[key]}")
-            return False
+    try:
+        with open(datafile_path) as f:
+            data=json.load(f)
+            db.client.beacon[collection_name].insert_many(data)
+        return True
+    except:
+        print(f"the downloaded file probably does not exist. file name:{datafile_path}")
+        logging.info(f"the downloaded file probably does not exist. file name:{datafile_path}")
+        return False
+
+
+
 
 
 def persist_variant_origins(dataset_id: str, dataset: str, record):
@@ -282,19 +308,26 @@ def persist_variant_origins(dataset_id: str, dataset: str, record):
             Nothing.
     """
     try:
-        with open(dataset) as j_f:
+        with open(dataset) as j_f:  # error
                 data = json.load(j_f)
                 for variant in data:
                     try:
                         ALT = variant['alternateBases']
                         start = variant['position']['start'][0]
                         REF = variant['referenceBases']
-                        res = db.client.beacon.genomicVariations.find({"alternateBases": ALT}, {"start": start},
-                                                                      {"referenceBases": REF})
-                        record.write(f'{res["_id"]}{dataset_id}\n')
+                        var_id = variant['variantInternalId']
                     except:
-                        print(f'some fields may not be found in {variant}')
+                        print(f'some fields may not be found')
                         continue
+                    try:
+                        res_list=db.get_variant_indices(start,REF,ALT,var_id)
+                        for res_id in res_list:
+                            record.write(f'data_id:{res_id} dataset_id:{dataset_id} alternateBases:{ALT} start:{start} referenceBases:{REF} variantInternalId:{var_id}\n')
+                    except:
+                        print(f'Some things were wrong when search this field and record')
+                        continue
+
+
     except:
         print(f'the dataset file probably does not exist dataset:{dataset_id}')
         logging.info(f'the dataset file probably does not exist dataset:{dataset_id}')
@@ -306,7 +339,8 @@ def update_variant_counts():
     asd
     """
 
-    db.update_dataset_counts()
+    info=db.update_dataset_counts()
+    return info
 
 
 
@@ -342,6 +376,8 @@ def command_rebuild(args: Namespace):
 
 
 
+
+
     if args.store_origins:
         if os.path.exists(args.origins_file):
             os.remove(args.origins_file)
@@ -358,27 +394,25 @@ def command_rebuild(args: Namespace):
                  "individuals": "/tmp/individuals-", "runs": "/tmp/runs-"}
     # load data from beacon histories
 
-    BFF_files = {}
     for history_id in get_beacon_histories(gi):
         for dataset in get_datasets(gi, history_id):
             logging.info(f"next file is {dataset.name}")
             name = dataset.name.split('.')[0]
             path = path_dict[name] + dataset.uuid
             download_dataset(gi, dataset, path)
-            BFF_files[name] = path
+            if not import_to_mongodb(name,path):
+                return False
             if name=='genomicVariations':
                 if args.store_origins:
                     persist_variant_origins(dataset.id, path, variant_origins_file)
-
-    if BFF_files == {}:
-        print(f"Did not get any files from Galaxy galaxy_key:{args.galaxy_key}")
-        logging.info(f"Did not get any files from Galaxy galaxy_key:{args.galaxy_key}")
-        return False
+    
 
 
-    if not import_to_mongodb(BFF_files):
-        return False
 
+    # calculate variant counts
+    logging.info("Setting variant counts")
+    info=update_variant_counts()
+    logging.info(f"{info}")
 
 
 def command_search(args: Namespace):
