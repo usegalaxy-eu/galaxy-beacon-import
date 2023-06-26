@@ -27,10 +27,17 @@ Perform the following actions in your local galaxy (`http://localhost:8080`)
 
 Beacon python is an implementation of beacon in python. It will be the target of the import.
 
+### Beacon 1 
 The project also comes with a `docker-compose.yml` so starting a local instance is pretty straight forward.
 
     git clone https://github.com/CSCfi/beacon-python.git
     cd beacon-python/deploy
+    docker-compose up -d
+
+### Beacon 2
+
+    git clone https://github.com/EGA-archive/beacon2-ri-tools.git
+    cd beacon2-ri-tools
     docker-compose up -d
 
 
@@ -42,7 +49,15 @@ requirements.txt.
     git clone https://github.com/Paprikant/galaxy-beacon-import.git
     cd galaxy-beacon-import
     pip3 install -r requirements.txt
+
+    
     
 ## 5. Run the import
 
+### Beacon 1
+
     ./beacon-import.py -k <api-key-from-step-2>
+
+### Beacon 2 
+
+    ./beacon2-import.py -k <api-key-from-step-2>
