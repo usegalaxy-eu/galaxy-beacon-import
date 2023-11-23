@@ -1,160 +1,12 @@
-import argparse
-import logging
-import re
-import os
-
-from argparse import Namespace
-
-
-from utils import *
-
-
 from pymongo import MongoClient
 import json
+import logging
+import re
+import argparse
+import os
+import sys
 
-
-class BeaconDB:
-    def __int__(self):
-        self.client = MongoClient()
-        self.database_user = ''
-        self.database_password = ''
-        self.database_host = ''
-        self.database_port = ''
-        self.database_name = ''
-        self.database_auth_source = ''
-
-    def connection(self):
-        try:
-            self.client = MongoClient(
-                # connect to MongoDB database
-                "mongodb://{}:{}@{}:{}/{}?authSource={}".format(
-                    self.database_user,
-                    self.database_password,
-                    self.database_host,
-                    self.database_port,
-                    self.database_name,
-                    self.database_auth_source
-                )
-            )
-            return True
-        except:
-            print(f'Failed to connect MongoDB user:{self.database_user} db:{self.database_name}')
-            logging.info(f'Failed to connect MongoDB user:{self.database_user} db:{self.database_name}')
-            return False
-
-
-
-    def clear_database(self):
-        existing_names = self.client.beacon.list_collection_names()
-        for name in existing_names:
-            try:
-                self.client.beacon[name].drop()
-            except:
-                print(f'Warning: Failed to clear database user:{self.database_user} db:{self.database_name}')
-                logging.info(f'Warning: Failed to clear database user:{self.database_user} db:{self.database_name}')
-                return False
-        return True
-
-    def get_variant_indices(self, start: int, ref: str, alt: str,var_id:str) -> List[str]:
-        rows=self.client.beacon['genomicVariations'].find({'alternateBases':alt,'referenceBases':ref,'variantInternalId':var_id})
-        rows_l=[row for row in rows]
-        rows_res_list=[]
-        for row_dict in rows_l:
-            if row_dict['position']['start'][0]==start:
-                rows_res_list.append(row_dict)
-        return [str(row["_id"]) for row in rows_res_list]
-
-
-
-
-
-    
-    def update_dataset_counts(self):
-        """
-        Calculates and sets actual counts for the accumulated datasets
-
-            Parameters:
-                None
-            
-            Returns:
-                Nothing
-        """
-        try:
-            rows=db.client.beacon['genomicVariations'].find({})
-            count=0
-            for row in rows:
-                count+=1
-            db.client.beacon['datasets'].update_many({},{'$set':{'data_count':str(count)}})
-            return f'There are {str(count)} data'
-        except:
-            return 'There are some errors in update dataset counts'
-
-        
-
-
-db: BeaconDB = BeaconDB()
-
-
-
-def parse_arguments() -> Namespace:
-    """
-    Defines and parses command line arguments for this script
-
-        Parameters:
-            None.
-
-        Returns:
-            args (Namespace): argparse.Namespace object containing the parsed arguments
-    """
-    parser = argparse.ArgumentParser(description="Push genomic variants from galaxy to beacon.")
-    subparsers = parser.add_subparsers(dest='command')
-    subparsers.required = True
-
-    # arguments controlling output
-    parser.add_argument('-d', '--debug', help="Print lots of debugging statements", action="store_const", dest="loglevel", const=logging.DEBUG, default=logging.WARNING)
-    parser.add_argument('-v', '--verbose', help="Be verbose", action="store_const", dest="loglevel", const=logging.INFO)
-
-    # arguments controlling galaxy connection
-    parser.add_argument("-u", "--galaxy-url", type=str, metavar="", default="http://localhost:8080", dest="galaxy_url",
-                        help="galaxy hostname or IP")
-    parser.add_argument("-k", "--galaxy-key", type=str, metavar="", default="",
-                        dest="galaxy_key", help="API key of a galaxy user WITH ADMIN PRIVILEGES")
-
-    # sub-parser for command "rebuild"
-    parser_rebuild = subparsers.add_parser('rebuild')
-    parser_rebuild.add_argument("-s", "--store-origins", default=False, dest="store_origins",
-                                action="store_true",
-                                help="make a local file containing variantIDs with the dataset they stem from")
-    parser_rebuild.add_argument("-o", "--origins-file", type=str, metavar="", default="/tmp/variant-origins.txt",
-                                dest="origins_file",
-                                help="full file path of where variant origins should be stored (if enabled)")
-
-    # database connection
-    parser_rebuild.add_argument("-A", "--db-auth-source", type=str, metavar="admin", default="admin",
-                                dest="database_auth_source",
-                                help="auth source for the beacon database")
-    parser_rebuild.add_argument("-H", "--db-host", type=str, metavar="", default="127.0.0.1", dest="database_host",
-                                help="hostname/IP of the beacon database")
-    parser_rebuild.add_argument("-P", "--db-port", type=str, metavar="", default="27017", dest="database_port",
-                                help="port of the beacon database")
-    parser_rebuild.add_argument("-U", "--db-user", type=str, metavar="", default="root", dest="database_user",
-                                help="login user for the beacon database")
-    parser_rebuild.add_argument("-W", "--db-password", type=str, metavar="", default="example",
-                                dest="database_password",
-                                help="login password for the beacon database")
-    parser_rebuild.add_argument("-N", "--db-name", type=str, metavar="", default="beacon", dest="database_name",
-                                help="name of the beacon database")
-
-    # sub-parser for command search
-    parser_search = subparsers.add_parser('search')
-    parser_search.add_argument("-s", "--start", type=int, metavar="", dest="start", required=True,
-                               help="start position of the searched variant")
-    parser_search.add_argument("-r", "--ref", type=str, metavar="", dest="ref", required=True,
-                               help="sequence in the reference")
-    parser_search.add_argument("-a", "--alt", type=str, metavar="", dest="alt", required=True,
-                               help="alternate sequence found in the variant")
-
-    return parser.parse_args()
+from utils import *
 
 
 
@@ -251,7 +103,57 @@ def download_dataset(gi: GalaxyInstance, dataset: GalaxyDataset, filename: str) 
         logging.critical(f"something went wrong while downloading file - {e} filename:{filename}")
 
 
-def import_to_mongodb(collection_name,datafile_path):
+
+
+def persist_variant_origins(dataset_id: str, dataset: str, record):
+    """
+    Maps dataset_id to variant index in a separate file (which is hard-coded)
+
+        Note:
+            We do not want any information in the beacon database that may be used to reconstruct an actual file
+            uploaded to galaxy. Additionally, we do not want to change the dataset import functions provided by
+            beacon python.
+            Therefore, a separate file is maintained linking variant indices and dataset IDs. Since we do not interfere
+            with the actual variant import these indices have to be queried individually from beacons database.
+
+        Parameters:
+            dataset_id (str): Dataset id as returned by the galaxy api
+            dataset (JSON): The actual dataset
+            record (Any): Output file in which to persist the records
+
+        Returns:
+            Nothing.
+    """
+    try:
+        with open(dataset) as j_f:
+            data = json.load(j_f)
+            for variant in data:
+                assem_Id = variant.get('assemblyId', '')
+                REF_name = variant.get('referenceName', '')
+                start = variant.get('start', '')
+                end = variant.get('end', '')
+                REF = variant.get('referenceBases', '')
+                ALT = variant.get('alternateBases', '')
+                var_tybe = variant.get('variantType', '')
+
+                missing_fields = [field for field, value in {'assemblyId': assem_Id, 'referenceName': REF_name, 'start': start, 'end': end, 'referenceBases': REF, 'alternateBases': ALT, 'variantType': var_tybe}.items() if not value]
+
+                if missing_fields:
+                    print(f"Missing fields: {missing_fields}")
+
+                try:
+                    record.write(f'assemblyId:{assem_Id} referenceName:{REF_name} start:{start} end:{end} referenceBases:{REF}  alternateBases:{ALT} variantType:{var_tybe}\n')
+                except:
+                    print(f'Some things were wrong when searching this field and record')
+                    continue
+
+    except FileNotFoundError:
+        print(f'The dataset file probably does not exist for dataset: {dataset_id}')
+        logging.info(f'The dataset file probably does not exist for dataset: {dataset_id}')
+        return False
+
+
+def import_to_mongodb(datafile_path):
     """
     Import a dataset to beacon
 
@@ -275,211 +177,196 @@ def import_to_mongodb(collection_name,datafile_path):
     """
     # Import  BFF files
     try:
-        with open(datafile_path) as f:
-            data=json.load(f)
-            db.client.beacon[collection_name].insert_many(data)
-        return True
-    except:
-        print(f"the downloaded file probably does not exist. file name:{datafile_path}")
-        logging.info(f"the downloaded file probably does not exist. file name:{datafile_path}")
-        return False
+        with open(datafile_path, "r") as json_file:
+            variants = json.load(json_file)
+        return variants
+    except FileNotFoundError as e:
+        print(f"File not found: {datafile_path}")
+        logging.info(f"File not found: {datafile_path}")
+    except json.JSONDecodeError as e:
+        print(f"JSON decoding error: {e}")
+        logging.info(f"JSON decoding error: {e}")
 
 
-
-
-
-def persist_variant_origins(dataset_id: str, dataset: str, record):
-    """
-    Maps dataset_id to variant index in a separate file (which is hard-coded)
-
-        Note:
-            We do not want any information in the beacon database that may be used to reconstruct an actual file
-            uploaded to galaxy. Additionally, we do not want to change the dataset import functions provided by
-            beacon python.
-            Therefore, a separate file is maintained linking variant indices and dataset IDs. Since we do not interfer
-            with the actual variant import these indices have to be queried individually from beacons database.
-
-        Parameters:
-            dataset_id (str): Dataset id as returned by the galaxy api
-            dataset (VCF): The actual dataset
-            record (Any): Output file in which to persist the records
-
-        Returns:
-            Nothing.
-    """
+# Function to read JSON data from a file
+def read_json_file(file_path):
     try:
-        with open(dataset) as j_f:  # error
-                data = json.load(j_f)
-                for variant in data:
-                    try:
-                        ALT = variant['alternateBases']
-                        start = variant['position']['start'][0]
-                        REF = variant['referenceBases']
-                        var_id = variant['variantInternalId']
-                    except:
-                        print(f'some fields may not be found')
-                        continue
-                    try:
-                        res_list=db.get_variant_indices(start,REF,ALT,var_id)
-                        for res_id in res_list:
-                            record.write(f'data_id:{res_id} dataset_id:{dataset_id} alternateBases:{ALT} start:{start} referenceBases:{REF} variantInternalId:{var_id}\n')
-                    except:
-                        print(f'Some things were wrong when search this field and record')
-                        continue
+        with open(file_path, "r") as json_file:
+            variants = json.load(json_file)
+        return variants
+    except FileNotFoundError:
+        print(f"File not found: {file_path}")
+        logging.info(f"File not found: {file_path}")
+    except json.JSONDecodeError as e:
+        print(f"JSON decoding error: {e}")
+        logging.info(f"JSON decoding error: {e}")
 
 
-    except:
-        print(f'the dataset file probably does not exist dataset:{dataset_id}')
-        logging.info(f'the dataset file probably does not exist dataset:{dataset_id}')
-        return False
+def connect_arguments(parser):
+    connection_group = parser.add_argument_group("Connection to MongoDB")
+    connection_group.add_argument("-H", "--db-host", type=str, default="127.0.0.1", dest="database_host", help="Hostname/IP of the beacon database")
+    connection_group.add_argument("-P", "--db-port", type=int, default=27017, dest="database_port", help="Port of the beacon database")
+    
+    advance_connection_group = parser.add_argument_group("Addvanced Connection to MongoDB")
+    advance_connection_group.add_argument('-a', '--advance-connection', action="store_true", dest="advance", default=False, help="Connect to beacon database with authentication")
+    advance_connection_group.add_argument("-A", "--db-auth-source", type=str, metavar="ADMIN", default="", dest="Database_auth_source", help="auth source for the beacon database")
+    advance_connection_group.add_argument("-U", "--db-user", type=str, default="", dest="database_user", help="Login user for the beacon database")
+    advance_connection_group.add_argument("-W", "--db-password", type=str, default="", dest="database_password", help="Login password for the beacon database")
+    advance_connection_group.add_argument("-N", "--db-name", type=str, default="", dest="database_name", help="Name of the beacon database")
 
+    # arguments controlling galaxy connection
+    galaxy_connection_group = parser.add_argument_group("Connection to Galaxy")
+    galaxy_connection_group.add_argument('-g', '--galaxy', action="store_true", dest="galaxy", default=False, help="Import data from Galaxy")
+    galaxy_connection_group.add_argument("-u", "--galaxy-url", type=str, default="", dest="galaxy_url", help="Galaxy hostname or IP")
+    galaxy_connection_group.add_argument("-k", "--galaxy-key", type=str, default="", dest="galaxy_key", help="API key of a galaxy user WITH ADMIN PRIVILEGES")
+    
+    # 
+    database_group = parser.add_argument_group("Database Configuration")
+    database_group.add_argument("-d", "--database ", type=str, default="", dest="database", help="The targeted beacon database")
+    database_group.add_argument("-c", "--collection", type=str, default="", dest="collection", help="The targeted beacon collection from the desired database")
+    #
 
-def update_variant_counts():
+def connect_to_mongodb(args):
+    # Connect to MongoDB database with authentication
+    if args.advance:
+        # check advanced input for connection
+        advanced_required_args = ['database_auth_source', 'database_user', 'database_password', 'database_name']
+        if any(getattr(args, arg)  == "" for arg in advanced_required_args):
+            for arg in advanced_required_args:
+                if not getattr(args, arg):
+                    print(f"Missing value -> {arg}. Use -h or --help for usage details.")
+                    logging.info(f"Missing value -> {arg}")
+            parser.print_help()
+            sys.exit(1)
+        # Connect to MongoDB database with authentication
+        client = MongoClient(f"mongodb://{args.database_user}:{args.database_password}@{args.database_host}:{args.database_port}/{args.collection}?authSource={args.database_auth_source}")
+    else:
+        # Connect to MongoDB database without authentication
+        client = MongoClient(args.database_host, args.database_port)
+    return client
+
+def clear_collections(db, args):
     """
-    asd
+    Clears collections in the MongoDB database based on the provided arguments.
+
+    Parameters:
+        db (MongoClient): MongoDB client connected to the database.
+        args (Namespace): Parsed command-line arguments.
+
+    Returns:
+        bool: True if collections are cleared successfully, False otherwise.
     """
+    existing_names = db.list_collection_names()
 
-    info=db.update_dataset_counts()
-    return info
-
-
-
-
-def command_rebuild(args: Namespace):
-    """
-    Rebuilds beacon database based on datasets retrieved from galaxy
-
-        Parameters:
-             None.
-
-        Returns:
-            Nothing.
-
-        Note:
-            This function uses args from the rebuild subparser
-    """
-
-    global db
-    gi = set_up_galaxy_instance(args.galaxy_url, args.galaxy_key)
-
-    db.database_user = args.database_user
-    db.database_password = args.database_password
-    db.database_host = args.database_host
-    db.database_port = args.database_port
-    db.database_name = args.database_name
-    db.database_auth_source = args.database_auth_source
-
-    if not db.connection():
-        return False
-    # # delete all data before the new import
-    db.clear_database()
-
-
-
-
-
-    if args.store_origins:
-        if os.path.exists(args.origins_file):
-            os.remove(args.origins_file)
-        # open a file to store variant origins
-        try:
-            variant_origins_file = open(args.origins_file, "a")
-        except:
-            print(f"Can not open origins_file {args.origins_file}")
-            logging.info(f"Can not open origins_file {args.origins_file}")
-            return False
-
-    path_dict = {"analyses": "/tmp/analyses-", "biosamples": "/tmp/biosamples-", "cohorts": "/tmp/cohorts-",
-                 "datasets": "/tmp/datasets-", "genomicVariations": "/tmp/genomicVariations-",
-                 "individuals": "/tmp/individuals-", "runs": "/tmp/runs-"}
-    # load data from beacon histories
-
-    for history_id in get_beacon_histories(gi):
-        for dataset in get_datasets(gi, history_id):
-            logging.info(f"next file is {dataset.name}")
-            name = dataset.name.split('.')[0]
-            path = path_dict[name] + dataset.uuid
-            download_dataset(gi, dataset, path)
-            if not import_to_mongodb(name,path):
+    if args.clear_all:
+        # Clear all collections
+        for name in existing_names:
+            try:
+                db[name].drop()
+            except Exception as e:
+                print(f'Warning: Failed to clear collection {name}. Error: {e}')
+                logging.info(f'Warning: Failed to clear collection {name}. Error: {e}')
                 return False
-            if name=='genomicVariations':
+        return True
+
+    elif args.clear_coll:
+        # Clear a specific collection
+        for name in existing_names:
+            if name == args.removed_coll_name:
+                try:
+                    db[name].drop()
+                except Exception as e:
+                    print(f'Warning: Failed to clear collection {name}. Error: {e}')
+                    logging.info(f'Warning: Failed to clear collection {name}. Error: {e}')
+                    return False
+        return True
+
+    return False  # No action specified
+
+def beacon2_import():
+    parser = argparse.ArgumentParser(description="Input arguments")
+    connect_arguments(parser)
+    beacon_import = parser.add_argument_group("Import Json Arguments")
+    beacon_import.add_argument("-i", "--input_json_file", type=str, default="", help="Input the local path to the JSON file or it's name on your Galaxy Hitory to import to beacon")
+    # store origin
+    store_origin = parser.add_argument_group("store origin")
+    store_origin.add_argument("-s", "--store-origins", default=False, dest="store_origins", action="store_true", help="Make a local file containing variantIDs with the dataset they stem from")
+    store_origin.add_argument("-o", "--origins-file", type=str, metavar="", default="/tmp/variant-origins.txt", dest="origins_file", help="Full file path of where variant origins should be stored (if enabled)")
+    # arguments controlling output
+    control_output = parser.add_argument_group("control output")
+    control_output.add_argument('-D', '--debug', action="store_const", dest="loglevel", const=logging.DEBUG, default=logging.WARNING)
+    control_output.add_argument('-V', '--verbose', dest="loglevel", const=logging.INFO, help="Be verbose", action="store_const")
+    # Clear beacon database
+    clear_beacon = parser.add_argument_group("Clear beacon database")
+    clear_beacon.add_argument('-ca', '--clearAll', action="store_true", dest="clear_all", default=False, help="Delete all data before the new import")
+    clear_beacon.add_argument('-cc', '--clearColl', action="store_true", dest="clear_coll", default=False, help="Delete specific collection before the new import")
+    clear_beacon.add_argument("-r", "--removeCollection", type=str, default="", dest="removed_coll_name", help="Define the collection name for deletion")
+    args = parser.parse_args()
+    
+    # check inputs
+    required_args = ['database', 'collection', 'database_host', 'database_port','input_json_file']
+    for arg in required_args:
+        if not getattr(args, arg):
+            print(f"Missing value -> {arg}. Use -h or --help for usage details.")
+            logging.info(f"Missing value -> {arg}")
+            parser.print_help()
+            sys.exit(1)
+    
+    # connect to beacon 
+    client= connect_to_mongodb(args)
+    db = client[args.database]
+    collection = db[args.collection]
+    
+    clear_collections(db, args)
+    
+    
+    
+    # connect to Galaxy instance 
+    if args.galaxy:
+        # Check galaxy inputs to connect to Galaxy
+        galaxy_args = ['galaxy_url', 'galaxy_key']
+        if any(getattr(args, arg) == "" for arg in galaxy_args):
+            for arg in galaxy_args:
+                if not getattr(args, arg):
+                    print(f"Missing value -> {arg}. Use -h or --help for usage details.")
+                    logging.info(f"Missing value -> {arg}")
+            parser.print_help()
+            sys.exit(1)
+    
+        gi = set_up_galaxy_instance(args.galaxy_url, args.galaxy_key)
+    
+        if args.store_origins:
+            if os.path.exists(args.origins_file):
+                os.remove(args.origins_file)
+            # open a file to store variant origins
+            try:
+                variant_origins_file = open(args.origins_file, "a")
+            except:
+                print(f"Can not open origins_file {args.origins_file}")
+                logging.info(f"Can not open origins_file {args.origins_file}")
+                sys.exit(1)
+        json_file= args.input_json_file.split('.')[0]
+        path_dict = {f"{json_file}": f"/tmp/{json_file}_file-"}
+        # load data from beacon histories
+        for history_id in get_beacon_histories(gi):
+            for dataset in get_datasets(gi, history_id):
+                logging.info(f"next file is {dataset.name}")
+                name = dataset.name.split('.')[0]
+                path = path_dict[name] + dataset.uuid
+                download_dataset(gi, dataset, path)
+                variants = import_to_mongodb(path)
                 if args.store_origins:
                     persist_variant_origins(dataset.id, path, variant_origins_file)
     
+    else:
+        variants = read_json_file(args.input_json_file)
+    
+    if variants is not None:
+        for v in variants:
+            vid = collection.insert_one(v).inserted_id
+            vstr = f"refvar-{vid}"
+            collection.update_one({"_id": vid}, {"$set": {"id": vstr}})
+            print(f"==> inserted {vstr}")
 
-
-
-    # calculate variant counts
-    logging.info("Setting variant counts")
-    info=update_variant_counts()
-    logging.info(f"{info}")
-
-
-def command_search(args: Namespace):
-    """
-    Searches a variant (as specified in command line args) across all datasets
-
-    Note:
-        This will download each dataset
-    """
-    gi = set_up_galaxy_instance(args.galaxy_url, args.galaxy_key)
-
-    path_dict = {"analyses": "/tmp/analyses-", "biosamples": "/tmp/biosamples-", "cohorts": "/tmp/cohorts-",
-                 "datasets": "/tmp/datasets-", "genomicVariations": "/tmp/genomicVariations-",
-                 "individuals": "/tmp/individuals-", "runs": "/tmp/runs-"}
-    print(f"searching variant {args.ref} -> {args.alt} at position {args.start} (each dot is one dataset)\n")
-    # load data from beacon histories
-    sign=False
-    for history_id in get_beacon_histories(gi):
-        for dataset in get_datasets(gi, history_id):
-            name = dataset.name.split('.')[0]
-            if name == "genomicVariations":
-                sign=True
-                genomicVariations_file = f"/tmp/genomicVariations-{dataset.uuid}"
-                download_dataset(gi, dataset, genomicVariations_file)
-                try:
-                    with open(genomicVariations_file) as j_f:
-                        data = json.load(j_f)
-                        for variant in data:
-                            try:
-                                ALT = variant['alternateBases']
-                                start = variant['position']['start'][0]
-                                REF = variant['referenceBases']
-                                if start == args.start and REF == args.ref and args.alt in ALT:
-                                    print(f"found variant in dataset {dataset.id} ({dataset.name})")
-                            except:
-                                print(f'some fields may not be found in {variant}')
-                                continue
-                    os.remove(genomicVariations_file)
-                except:
-                    print(f'can not open genomicVariations_file file path:{genomicVariations_file}')
-                    logging.info(f'can not open genomicVariations_file file path:{genomicVariations_file}')
-                    return False
-    if not sign:
-        print(f'can not find genomicVariations_file galaxy_key:{args.galaxy_key}')
-        logging.info(f'can not find genomicVariations_file galaxy_key:{args.galaxy_key}')
-        return False
-
-
-
-
-def main():
-    """
-    Main function runs sub commands based on the given command line arguments
-    """
-    args = parse_arguments()
-
-    logging.basicConfig(level=args.loglevel)
-
-    if args.command == "rebuild":
-        command_rebuild(args)
-
-    if args.command == "search":
-        command_search(args)
-
-
-if __name__ == '__main__':
-    """
-    Execute the script
-    """
-    main()
+if __name__ == "__main__":
+    beacon2_import()
