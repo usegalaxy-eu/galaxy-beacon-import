@@ -40,7 +40,7 @@ def connect_to_mongodb(args):
         client = MongoClient(args.database_host, args.database_port)
     return client
 
-def beacon_query():
+def beacon2_search():
 
     """
     Beacon Query Tool
@@ -219,4 +219,4 @@ def beacon_query():
         pprint.pprint(v)
 
 if __name__ == "__main__":
-    beacon_query()
+    beacon2_search()

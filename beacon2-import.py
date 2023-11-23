@@ -283,7 +283,7 @@ def clear_collections(db, args):
 
     return False  # No action specified
 
-def MongoDBimporter():
+def beacon2_import():
     parser = argparse.ArgumentParser(description="Input arguments")
     connect_arguments(parser)
     beacon_import = parser.add_argument_group("Import Json Arguments")
@@ -368,4 +368,5 @@ def MongoDBimporter():
             collection.update_one({"_id": vid}, {"$set": {"id": vstr}})
             print(f"==> inserted {vstr}")
 
-MongoDBimporter()
+if __name__ == "__main__":
+    beacon2_import()
