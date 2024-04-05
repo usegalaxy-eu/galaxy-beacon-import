@@ -209,7 +209,7 @@ def connect_arguments(parser):
     
     advance_connection_group = parser.add_argument_group("Addvanced Connection to MongoDB")
     advance_connection_group.add_argument('-a', '--advance-connection', action="store_true", dest="advance", default=False, help="Connect to beacon database with authentication")
-    advance_connection_group.add_argument("-A", "--db-auth-source", type=str, metavar="admin", default="admin", dest="database_auth_source", help="auth source for the beacon database")
+    advance_connection_group.add_argument("-A", "--db-auth-source", type=str, metavar="ADMIN", default="admin", dest="database_auth_source", help="auth source for the beacon database")
     advance_connection_group.add_argument("-U", "--db-user", type=str, default="", dest="database_user", help="Login user for the beacon database")
     advance_connection_group.add_argument("-W", "--db-password", type=str, default="", dest="database_password", help="Login password for the beacon database")
 
