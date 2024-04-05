@@ -2,45 +2,39 @@ from pymongo import MongoClient
 import argparse
 import pprint
 import sys
+import logging
 
 def common_arguments(parser):
     connection_group = parser.add_argument_group("Connection to MongoDB")
     connection_group.add_argument("-H", "--db-host", type=str, default="127.0.0.1", dest="database_host", help="hostname/IP of the beacon database")
     connection_group.add_argument("-P", "--db-port", type=int, default=27017, dest="database_port", help="port of the beacon database")
     
-    advance_connection_group = parser.add_argument_group("Addvanced Connection to MongoDB")
+    advance_connection_group = parser.add_argument_group("Advanced Connection to MongoDB")
     advance_connection_group.add_argument('-a', '--advance-connection', action="store_true", dest="advance", default=False, help="Connect to beacon database with authentication")
-    advance_connection_group.add_argument("-A", "--db-auth-source", type=str, metavar="ADMIN", default="", dest="database_auth_source", help="auth source for the beacon database")
+    advance_connection_group.add_argument("-A", "--db-auth-source", type=str, metavar="ADMIN", default="admin", dest="database_auth_source", help="auth source for the beacon database")
     advance_connection_group.add_argument("-U", "--db-user", type=str, default="", dest="database_user", help="login user for the beacon database")
     advance_connection_group.add_argument("-W", "--db-password", type=str, default="", dest="database_password", help="login password for the beacon database")
-    advance_connection_group.add_argument("-N", "--db-name", type=str, default="", dest="database_name", help="name of the beacon database")
 
     database_group = parser.add_argument_group("Database Configuration")
-    database_group.add_argument("-d", "--database ", type=str, default="", dest="database", help="The targeted beacon database")
+    database_group.add_argument("-d", "--database", type=str, default="", dest="database", help="The targeted beacon database")
     database_group.add_argument("-c", "--collection", type=str, default="", dest="collection", help="The targeted beacon collection from the desired database")
 
-
-
 def connect_to_mongodb(args):
-    # Connect to MongoDB database with authentication
     if args.advance:
-        # check advanced input for connection
-        advanced_required_args = ['database_auth_source', 'database_user', 'database_password', 'database_name']
-        if any(getattr(args, arg)  == "" for arg in advanced_required_args):
+        advanced_required_args = ['database_auth_source', 'database_user', 'database_password']
+        if any(getattr(args, arg) == "" for arg in advanced_required_args):
             for arg in advanced_required_args:
                 if not getattr(args, arg):
                     print(f"Missing value -> {arg}. Use -h or --help for usage details.")
                     logging.info(f"Missing value -> {arg}")
             parser.print_help()
             sys.exit(1)
-        # Connect to MongoDB database with authentication
-        client = MongoClient(f"mongodb://{args.database_user}:{args.database_password}@{args.database_host}:{args.database_port}/{args.collection}?authSource={args.database_auth_source}")
+        client = MongoClient(f"mongodb://{args.database_user}:{args.database_password}@{args.database_host}:{args.database_port}/{args.database}?authSource={args.database_auth_source}")
     else:
-        # Connect to MongoDB database without authentication
         client = MongoClient(args.database_host, args.database_port)
     return client
 
-def beacon2_search():
+def beacon_query():
 
     """
     Beacon Query Tool
@@ -64,11 +58,13 @@ def beacon2_search():
     """
     parser = argparse.ArgumentParser(description="Query Beacon Database")
     subparsers = parser.add_subparsers(dest="command")
+    parsers = {}
     # subparsers.required = True
 
     # Sub-parser for command "Beacon Sequence Queries"
     parser_sequence = subparsers.add_parser("sequence", help="Connect to MongoDB and perform sequence-based queries")
     common_arguments(parser_sequence)
+    parsers["sequence"] = parser_sequence
 
     # Positional Search Query Parameters
     query_group = parser_sequence.add_argument_group("Positional Database Query Arguments")
@@ -83,6 +79,7 @@ def beacon2_search():
     # Sub-parser for command "Beacon Range Queries"
     parser_range = subparsers.add_parser("range", help="Connect to MongoDB and perform range-based queries")
     common_arguments(parser_range)
+    parsers["range"] = parser_range
     
     # Positional Search Query Parameters
     query_group = parser_range.add_argument_group("Positional Database Query Arguments")
@@ -100,6 +97,7 @@ def beacon2_search():
     # Sub-parser for command "Beacon GeneId Queries"
     parser_gene = subparsers.add_parser("gene", help="Connect to MongoDB and perform geneID-based queries")
     common_arguments(parser_gene)
+    parsers["gene"] = parser_gene
     # Positional Search Query Parameters
     query_group = parser_gene.add_argument_group("Positional Database Query Arguments")
     query_group.add_argument("-g", "--geneId", type=str, default="", dest="geneId", help="Gene ID")
@@ -116,6 +114,7 @@ def beacon2_search():
     # Sub-parser for command "Beacon Bracket Queries"
     parser_bracket = subparsers.add_parser("bracket", help="Connect to MongoDB and perform bracket-based queries")
     common_arguments(parser_bracket)
+    parsers["bracket"] = parser_bracket
     
     # Search Query Parameters
     query_group = parser_bracket.add_argument_group("Positional Database Query Arguments")
@@ -141,8 +140,8 @@ def beacon2_search():
             for arg in required_args:
                 if not getattr(args, arg):
                     print(f"Missing value -> {arg}. Use -h or --help for usage details.")
-            parser_sequence.print_help()
-            sys.exit(1)
+                    parsers[args.command].print_help()
+                    sys.exit(1)
         query = {
             "referenceName": args.referenceName,
             "start": args.start,
@@ -156,8 +155,8 @@ def beacon2_search():
             for arg in required_args:
                 if not getattr(args, arg):
                     print(f"Missing value -> {arg}. Use -h or --help for usage details.")
-            parser_sequence.print_help()
-            sys.exit(1)
+                    parsers[args.command].print_help()
+                    sys.exit(1)
         query = {
             "referenceName": args.referenceName,
             "start": args.start,
@@ -175,8 +174,8 @@ def beacon2_search():
             for arg in required_args:
                 if not getattr(args, arg):
                     print(f"Missing value -> {arg}. Use -h or --help for usage details.")
-            parser_sequence.print_help()
-            sys.exit(1)
+                    parsers[args.command].print_help()
+                    sys.exit(1)
         query = {
             "geneId": args.geneId,
             "variantType": args.variantType,
@@ -192,8 +191,8 @@ def beacon2_search():
             for arg in required_args:
                 if not getattr(args, arg):
                     print(f"Missing value -> {arg}. Use -h or --help for usage details.")
-            parser_sequence.print_help()
-            sys.exit(1)
+                    parsers[args.command].print_help()
+                    sys.exit(1)
         
         query = {
             "referenceName": args.geneId,
@@ -202,13 +201,13 @@ def beacon2_search():
             "variantType": args.variantType
         }
     # Connect to MongoDB collection
-    advanced_required_args = ['database_auth_source', 'database_user', 'database_password', 'database_name']
+    advanced_required_args = ['database_auth_source', 'database_user', 'database_password']
     if any(getattr(args, arg)  != "" for arg in advanced_required_args):
         for arg in advanced_required_args:
             if not getattr(args, arg):
                 print(f"Missing value -> {arg}. Use -h or --help for usage details.")
-        parser_sequence.print_help()
-        sys.exit(1)
+                parsers[args.command].print_help()
+                sys.exit(1)
 
     client = connect_to_mongodb(args)
     db = client[args.database]
@@ -219,4 +218,4 @@ def beacon2_search():
         pprint.pprint(v)
 
 if __name__ == "__main__":
-    beacon2_search()
+    beacon_query()
