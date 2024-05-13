@@ -195,7 +195,7 @@ def beacon_query():
                     sys.exit(1)
         
         query = {
-            "referenceName": args.geneId,
+            "referenceName": args.referenceName,
             "start": {"$gte": args.start_minimum, "$lte": args.start_maximum},
             "end": {"$gte": args.end_minimum, "$lte": args.end_maximum},
             "variantType": args.variantType
