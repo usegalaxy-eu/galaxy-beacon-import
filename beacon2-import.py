@@ -314,7 +314,7 @@ def beacon2_import():
     client= connect_to_mongodb(args, parser)
     db = client[args.database]
     collection = db[args.collection]
-    #clear_collections(db, args)
+    clear_collections(db, args)
     
     
     
