@@ -209,10 +209,9 @@ def connect_arguments(parser):
     
     advance_connection_group = parser.add_argument_group("Addvanced Connection to MongoDB")
     advance_connection_group.add_argument('-a', '--advance-connection', action="store_true", dest="advance", default=False, help="Connect to beacon database with authentication")
-    advance_connection_group.add_argument("-A", "--db-auth-source", type=str, metavar="ADMIN", default="", dest="Database_auth_source", help="auth source for the beacon database")
+    advance_connection_group.add_argument("-A", "--db-auth-source", type=str, metavar="ADMIN", default="admin", dest="database_auth_source", help="auth source for the beacon database")
     advance_connection_group.add_argument("-U", "--db-user", type=str, default="", dest="database_user", help="Login user for the beacon database")
     advance_connection_group.add_argument("-W", "--db-password", type=str, default="", dest="database_password", help="Login password for the beacon database")
-    advance_connection_group.add_argument("-N", "--db-name", type=str, default="", dest="database_name", help="Name of the beacon database")
 
     # arguments controlling galaxy connection
     galaxy_connection_group = parser.add_argument_group("Connection to Galaxy")
@@ -226,11 +225,11 @@ def connect_arguments(parser):
     database_group.add_argument("-c", "--collection", type=str, default="", dest="collection", help="The targeted beacon collection from the desired database")
     #
 
-def connect_to_mongodb(args):
+def connect_to_mongodb(args, parser):
     # Connect to MongoDB database with authentication
     if args.advance:
         # check advanced input for connection
-        advanced_required_args = ['database_auth_source', 'database_user', 'database_password', 'database_name']
+        advanced_required_args = ['database_auth_source', 'database_user', 'database_password']
         if any(getattr(args, arg)  == "" for arg in advanced_required_args):
             for arg in advanced_required_args:
                 if not getattr(args, arg):
@@ -239,7 +238,7 @@ def connect_to_mongodb(args):
             parser.print_help()
             sys.exit(1)
         # Connect to MongoDB database with authentication
-        client = MongoClient(f"mongodb://{args.database_user}:{args.database_password}@{args.database_host}:{args.database_port}/{args.collection}?authSource={args.database_auth_source}")
+        client = MongoClient(f"mongodb://{args.database_user}:{args.database_password}@{args.database_host}:{args.database_port}/{args.database}?authSource={args.database_auth_source}")
     else:
         # Connect to MongoDB database without authentication
         client = MongoClient(args.database_host, args.database_port)
@@ -257,7 +256,6 @@ def clear_collections(db, args):
         bool: True if collections are cleared successfully, False otherwise.
     """
     existing_names = db.list_collection_names()
-
     if args.clear_all:
         # Clear all collections
         for name in existing_names:
@@ -313,10 +311,9 @@ def beacon2_import():
             sys.exit(1)
     
     # connect to beacon 
-    client= connect_to_mongodb(args)
+    client= connect_to_mongodb(args, parser)
     db = client[args.database]
     collection = db[args.collection]
-    
     clear_collections(db, args)
     
     

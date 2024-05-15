@@ -11,10 +11,9 @@ def common_arguments(parser):
     
     advance_connection_group = parser.add_argument_group("Advanced Connection to MongoDB")
     advance_connection_group.add_argument('-a', '--advance-connection', action="store_true", dest="advance", default=False, help="Connect to beacon database with authentication")
-    advance_connection_group.add_argument("-A", "--db-auth-source", type=str, metavar="ADMIN", default="", dest="database_auth_source", help="auth source for the beacon database")
+    advance_connection_group.add_argument("-A", "--db-auth-source", type=str, metavar="ADMIN", default="admin", dest="database_auth_source", help="auth source for the beacon database")
     advance_connection_group.add_argument("-U", "--db-user", type=str, default="", dest="database_user", help="login user for the beacon database")
     advance_connection_group.add_argument("-W", "--db-password", type=str, default="", dest="database_password", help="login password for the beacon database")
-    advance_connection_group.add_argument("-N", "--db-name", type=str, default="", dest="database_name", help="name of the beacon database")
 
     database_group = parser.add_argument_group("Database Configuration")
     database_group.add_argument("-d", "--database", type=str, default="", dest="database", help="The targeted beacon database")
@@ -22,7 +21,7 @@ def common_arguments(parser):
 
 def connect_to_mongodb(args):
     if args.advance:
-        advanced_required_args = ['database_auth_source', 'database_user', 'database_password', 'database_name']
+        advanced_required_args = ['database_auth_source', 'database_user', 'database_password']
         if any(getattr(args, arg) == "" for arg in advanced_required_args):
             for arg in advanced_required_args:
                 if not getattr(args, arg):
@@ -30,7 +29,7 @@ def connect_to_mongodb(args):
                     logging.info(f"Missing value -> {arg}")
             parser.print_help()
             sys.exit(1)
-        client = MongoClient(f"mongodb://{args.database_user}:{args.database_password}@{args.database_host}:{args.database_port}/{args.database_name}?authSource={args.database_auth_source}")
+        client = MongoClient(f"mongodb://{args.database_user}:{args.database_password}@{args.database_host}:{args.database_port}/{args.database}?authSource={args.database_auth_source}")
     else:
         client = MongoClient(args.database_host, args.database_port)
     return client
@@ -196,13 +195,13 @@ def beacon_query():
                     sys.exit(1)
         
         query = {
-            "referenceName": args.geneId,
+            "referenceName": args.referenceName,
             "start": {"$gte": args.start_minimum, "$lte": args.start_maximum},
             "end": {"$gte": args.end_minimum, "$lte": args.end_maximum},
             "variantType": args.variantType
         }
     # Connect to MongoDB collection
-    advanced_required_args = ['database_auth_source', 'database_user', 'database_password', 'database_name']
+    advanced_required_args = ['database_auth_source', 'database_user', 'database_password']
     if any(getattr(args, arg)  != "" for arg in advanced_required_args):
         for arg in advanced_required_args:
             if not getattr(args, arg):
