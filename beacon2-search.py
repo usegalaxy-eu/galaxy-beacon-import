@@ -35,34 +35,52 @@ def connect_to_mongodb(args):
     return client
 
 def beacon_query():
-
+    
     """
     Beacon Query Tool
-
-    This script provides a command-line interface for querying a Beacon Database
-    using various sub-commands for sequence, range, gene ID, or bracket criteria.
-
+    
+    This script provides a command-line interface for querying different collections in a Beacon Database using various sub-commands for sequence, range, gene ID, or bracket criteria.
+    
     Example Usage:
-
-    1. Query by sequence:
-        beacon_search sequence -d database_name -c collection_name -rn  -s  -ab 
-
-    2. Query by range:
-        beacon_search range -d database_name -c collection_name -rn  -s  -e  -v 
-
-    3. Query by gene ID:
-        beacon_search gene -d database_name -c collection_name -g  -vmin   -vmax 
-
-    4. Query by bracket:
-        beacon_search bracket -d database_name -c collection_name -rn  -smin  -smax  -emin  -emax  -v 
+    
+    1. Query genomicVariations collection by sequence:
+        beacon_search sequence -d database_name -c collection_name -rn reference_name -s start -ab alternate_bases
+    
+    2. Query genomicVariations collection by range:
+        beacon_search range -d database_name -c collection_name -rn reference_name -s start -e end -v variant_type
+    
+    3. Query genomicVariations collection by gene ID:
+        beacon_search gene -d database_name -c collection_name -g gene_id -vmin variant_min_length -vmax variant_max_length
+    
+    4. Query genomicVariations collection by bracket:
+        beacon_search bracket -d database_name -c collection_name -rn reference_name -smin start_minimum -smax start_maximum -emin end_minimum -emax end_maximum -v variant_type
+    
+    5. Query analyses collection:
+        beacon_search analyses -d database_name -c collection_name -al aligner -ad analysis_date -bi biosample_id -id identification -ii individual_id -pn pipeline_name -pr pipeline_ref -ri run_id -vc variant_caller
+    
+    6. Query biosamples collection:
+        beacon_search biosamples -d database_name -c collection_name -bs biosample_status -cd collection_date -cm collection_moment -id identification -op obtention_procedure -so sample_origin_type
+    
+    7. Query cohorts collection:
+        beacon_search cohorts -d database_name -c collection_name -ct cohort_data_types -cd cohort_design -cz cohort_size -t cohort_type -id identification -g genders -n name
+    
+    8. Query datasets collection:
+        beacon_search datasets -d database_name -c collection_name -o ontology -om ontology_modifiers -id identification -n name
+    
+    9. Query individuals collection:
+        beacon_search individuals -d database_name -c collection_name -g age_group -do disease_ontology -f family_history -se severity -st stage -e ethnicity -go geographic_origin -id identification -as assay_code -s sex
+    
+    10. Query runs collection:
+        beacon_search runs -d database_name -c collection_name -id identification -ii individual_id -ll library_layout -ls library_selection -s library_source -st library_strategy -p platform -pm platform_model -r run_date
     """
+    
     parser = argparse.ArgumentParser(description="Query Beacon Database")
     subparsers = parser.add_subparsers(dest="command")
     parsers = {}
     # subparsers.required = True
 
     # Sub-parser for command "Beacon Sequence Queries"
-    parser_sequence = subparsers.add_parser("sequence", help="Connect to MongoDB and perform sequence-based queries")
+    parser_sequence = subparsers.add_parser("sequence", help="Connect to MongoDB and perform sequence-based queries to the genomicVariations collection")
     common_arguments(parser_sequence)
     parsers["sequence"] = parser_sequence
 
@@ -77,7 +95,7 @@ def beacon_query():
     optional_query_group.add_argument("-id", "--collectionIds", type=str, default="", dest="collectionIds", help="Collection ID")
     
     # Sub-parser for command "Beacon Range Queries"
-    parser_range = subparsers.add_parser("range", help="Connect to MongoDB and perform range-based queries")
+    parser_range = subparsers.add_parser("range", help="Connect to MongoDB and perform range-based queries to the genomicVariations collection")
     common_arguments(parser_range)
     parsers["range"] = parser_range
     
@@ -95,7 +113,7 @@ def beacon_query():
     optional_query_group.add_argument("-vmin", "--variantMaxLength", type=int, default=None, dest="variantMaxLength", help="Variant maximum length")
     
     # Sub-parser for command "Beacon GeneId Queries"
-    parser_gene = subparsers.add_parser("gene", help="Connect to MongoDB and perform geneID-based queries")
+    parser_gene = subparsers.add_parser("gene", help="Connect to MongoDB and perform geneID-based queries to the genomicVariations collection")
     common_arguments(parser_gene)
     parsers["gene"] = parser_gene
     # Positional Search Query Parameters
@@ -112,7 +130,7 @@ def beacon_query():
     # Sub-parser for command "Beacon Bracket Queries"
 
     # Sub-parser for command "Beacon Bracket Queries"
-    parser_bracket = subparsers.add_parser("bracket", help="Connect to MongoDB and perform bracket-based queries")
+    parser_bracket = subparsers.add_parser("bracket", help="Connect to MongoDB and perform bracket-based queries to the genomicVariations collection")
     common_arguments(parser_bracket)
     parsers["bracket"] = parser_bracket
     
@@ -128,6 +146,127 @@ def beacon_query():
     optional_query_group = parser_bracket.add_argument_group("Optional Database Query Arguments")
     optional_query_group.add_argument("-rn", "--referenceName", type=str, default="", dest="referenceName", help="Reference name")
     optional_query_group.add_argument("-v", "--variantType", type=str, default="", dest="variantType", help="Variant type")
+    
+    
+    # Sub-parser for command "Beacon analyses Queries"
+
+    # Sub-parser for command "Beacon analyses Queries"
+    parser_analyses = subparsers.add_parser("analyses", help="Connect to MongoDB and querie the analyses collection")
+    common_arguments(parser_analyses)
+    parsers["analyses"] = parser_analyses
+    
+    
+    # Optional Search Query Parameters
+    
+    optional_query_group = parser_analyses.add_argument_group("Optional Database Query Arguments")
+    optional_query_group.add_argument("-al", "--aligner", type=str, default="", dest="aligner", help="Aligner")
+    optional_query_group.add_argument("-ad", "--analysisDate", type=str, default="", dest="analysisDate", help="Analysis Date")
+    optional_query_group.add_argument("-bi", "--biosampleId", type=str, default="", dest="biosampleId", help="Biosample ID")
+    optional_query_group.add_argument("-id", "--identification", type=str, default="", dest="identification", help="Identification")
+    optional_query_group.add_argument("-ii", "--individualId", type=str, default="", dest="individualId", help="Individual ID")
+    optional_query_group.add_argument("-pn", "--pipelineName", type=str, default="", dest="pipelineName", help="Pipeline Name")
+    optional_query_group.add_argument("-pr", "--pipelineRef", type=str, default="", dest="pipelineRef", help="Pipeline Reference")
+    optional_query_group.add_argument("-ri", "--runId", type=str, default="", dest="runId", help="Run ID")
+    optional_query_group.add_argument("-vc", "--variantCaller", type=str, default="", dest="variantCaller", help="Variant Caller")
+    
+
+
+    # Sub-parser for command "Beacon Biosample Queries"
+    parser_biosamples = subparsers.add_parser("biosamples", help="Connect to MongoDB and querie the biosample collection")
+    common_arguments(parser_biosamples)
+    parsers["biosamples"] = parser_biosamples
+    
+    
+    # Optional Search Query Parameters
+    
+    optional_query_group = parser_biosamples.add_argument_group("Optional Database Query Arguments")
+    optional_query_group.add_argument("-bs", "--biosampleStatus", type=str, default="", dest="biosampleStatus", help="Biosample Status")
+    optional_query_group.add_argument("-cd", "--collectionDate", type=str, default="", dest="collectionDate", help="Collection Date")
+    optional_query_group.add_argument("-cm", "--collectionMoment", type=str, default="", dest="collectionMoment", help="Mollection Moment")
+    optional_query_group.add_argument("-id", "--identification", type=str, default="", dest="identification", help="Identification")
+    optional_query_group.add_argument("-dm", "--diagnosticMarkers", type=str, default="", dest="diagnosticMarkers", help="Diagnostic Markers")
+    optional_query_group.add_argument("-hd", "--histologicalDiagnosis", type=str, default="", dest="histologicalDiagnosis", help="Histological Diagnosis")
+    optional_query_group.add_argument("-op", "--obtentionProcedure", type=str, default="", dest="obtentionProcedure", help="Obtention Procedure")
+    optional_query_group.add_argument("-ps", "--pathologicalStage", type=str, default="", dest="pathologicalStage", help="Pathological Stage")
+    optional_query_group.add_argument("-pf", "--pathologicalTnmFinding", type=str, default="", dest="pathologicalTnmFinding", help="Pathological Tnm Finding")
+    optional_query_group.add_argument("-ft", "--featureType", type=str, default="", dest="featureType", help="Feature Type")
+    optional_query_group.add_argument("-s", "--severity", type=str, default="", dest="severity", help="s")
+    optional_query_group.add_argument("-sd", "--sampleOriginDetail", type=str, default="", dest="sampleOriginDetail", help="Sample Origin Detail")
+    optional_query_group.add_argument("-so", "--sampleOriginType", type=str, default="", dest="sampleOriginType", help="Sample Origin Type")
+    optional_query_group.add_argument("-sp", "--sampleProcessing", type=str, default="", dest="sampleProcessing", help="Sample Processing")
+    optional_query_group.add_argument("-ss", "--sampleStorage", type=str, default="", dest="sampleStorage", help="Sample Storage")
+    optional_query_group.add_argument("-tg", "--tumorGrade", type=str, default="", dest="tumorGrade", help="Tumor Grade")
+    optional_query_group.add_argument("-tp", "--tumorProgression", type=str, default="", dest="tumorProgression", help="Tumor Progression")
+
+    # Sub-parser for command "Beacon cohorts Queries"
+    parser_cohorts = subparsers.add_parser("cohorts", help="Connect to MongoDB and querie the cohorts collection")
+    common_arguments(parser_cohorts)
+    parsers["cohorts"] = parser_cohorts
+    
+    
+    # Optional Search Query Parameters
+    
+    optional_query_group = parser_cohorts.add_argument_group("Optional Database Query Arguments")
+    optional_query_group.add_argument("-ct", "--cohortDataTypes", type=str, default="", dest="cohortDataTypes", help="Cohort Data Types")
+    optional_query_group.add_argument("-cd", "--cohortDesign", type=str, default="", dest="cohortDesign", help="Cohort Design")
+    optional_query_group.add_argument("-cz", "--cohortSize", type=int, default=None, dest="cohortSize", help="Cohort Size")
+    optional_query_group.add_argument("-t", "--cohortType", type=str, default="", dest="cohortType", help="Cohort Type")
+    optional_query_group.add_argument("-id", "--identification", type=str, default="", dest="identification", help="Identification")
+    optional_query_group.add_argument("-g", "--genders", type=str, default="", dest="genders", help="Genders")
+    optional_query_group.add_argument("-n", "--name", type=str, default="", dest="name", help="Name")
+    
+    # Sub-parser for command "Beacon datasets Queries"
+    parser_datasets = subparsers.add_parser("datasets", help="Connect to MongoDB and querie the datasets collection")
+    common_arguments(parser_datasets)
+    parsers["datasets"] = parser_datasets
+    
+    
+    # Optional Search Query Parameters
+    
+    optional_query_group = parser_datasets.add_argument_group("Optional Database Query Arguments")
+    optional_query_group.add_argument("-du", "--dataUseConditions", type=str, default="", dest="dataUseConditions", help="Data Use Conditions")
+    optional_query_group.add_argument("-om", "--ontologyModifiers", type=str, default="", dest="ontologyModifiers", help="Data Use Conditions Modifiers")
+    optional_query_group.add_argument("-id", "--identification", type=str, default="", dest="identification", help="Identification")
+    optional_query_group.add_argument("-n", "--name", type=str, default="", dest="name", help="Name")
+    
+    # Sub-parser for command "Beacon individuals Queries"
+    parser_individuals = subparsers.add_parser("individuals", help="Connect to MongoDB and querie the individuals collection")
+    common_arguments(parser_individuals)
+    parsers["individuals"] = parser_individuals
+    
+    
+    # Optional Search Query Parameters
+    
+    optional_query_group = parser_individuals.add_argument_group("Optional Database Query Arguments")
+    optional_query_group.add_argument("-g", "--ageGroup", type=str, default="", dest="ageGroup", help="Age Group")
+    optional_query_group.add_argument("-do", "--diseaseCode", type=str, default="", dest="diseaseCode", help="Disease Code")
+    optional_query_group.add_argument("-f", "--familyHistory", type=str, default="", dest="familyHistory", help="Family History")
+    optional_query_group.add_argument("-se", "--severity", type=str, default="", dest="severity", help="Severity")
+    optional_query_group.add_argument("-st", "--stage", type=str, default="", dest="stage", help="Stage")
+    optional_query_group.add_argument("-e", "--ethnicity", type=str, default="", dest="ethnicity", help="Ethnicity")
+    optional_query_group.add_argument("-go", "--geographicOrigin", type=str, default="", dest="geographicOrigin", help="Geographic Origin")
+    optional_query_group.add_argument("-id", "--identification", type=str, default="", dest="identification", help="Identification")
+    optional_query_group.add_argument("-as", "--assayCode", type=str, default="", dest="assayCode", help="Measures Ontology")
+    optional_query_group.add_argument("-s", "--sex", type=str, default="", dest="sex", help="sex")
+    
+    # Sub-parser for command "Beacon runs Queries"
+    parser_runs = subparsers.add_parser("runs", help="Connect to MongoDB and querie the runs collection")
+    common_arguments(parser_runs)
+    parsers["runs"] = parser_runs
+    
+    
+    # Optional Search Query Parameters
+    
+    optional_query_group = parser_runs.add_argument_group("Optional Database Query Arguments")
+    optional_query_group.add_argument("-id", "--identification", type=str, default="", dest="identification", help="Identification")
+    optional_query_group.add_argument("-ii", "--individualId", type=str, default="", dest="individualId", help="Individual Id")
+    optional_query_group.add_argument("-ll", "--libraryLayout", type=str, default="", dest="libraryLayout", help="Library Layout")
+    optional_query_group.add_argument("-ls", "--librarySelection", type=str, default="", dest="librarySelection", help="Library Selection")
+    optional_query_group.add_argument("-s", "--librarySource", type=str, default="", dest="librarySource", help="Library Source")
+    optional_query_group.add_argument("-st", "--libraryStrategy", type=str, default="", dest="libraryStrategy", help="Library Strategy")
+    optional_query_group.add_argument("-p", "--platform", type=str, default="", dest="platform", help="platform")
+    optional_query_group.add_argument("-pm", "--platformModel", type=str, default="", dest="platformModel", help="Platform Model")
+    optional_query_group.add_argument("-r", "--runDate", type=str, default="", dest="runDate", help="Run Date")
     
     args = parser.parse_args()
     # Check if a sub-command has been provided
@@ -145,33 +284,14 @@ def beacon_query():
                     print(f"Missing value -> {arg}. Use -h or --help for usage details.")
                     parsers[args.command].print_help()
                     sys.exit(1)
-        possible_fields = [
-            {"referenceName": "referenceName", "start": "start", "alternateBases": "alternateBases", "referenceBases": "referenceBases", "collectionIds": "collectionIds"},
-            {"referenceName": "variation.location.sequence_id", "start": "variation.location.interval.start.value", "alternateBases": "variation.alternateBases", "referenceBases": "variation.referenceBases", "collectionIds": "caseLevelData.biosampleId"}
-            # Add other potential field mappings as needed
-        ]
         
-        or_conditions = []
-        
-        for fields in possible_fields:
-            condition = {}
-            if args.referenceName:
-                condition[fields["referenceName"]] = args.referenceName
-            if args.start is not None:
-                condition[fields["start"]] = args.start
-            if args.alternateBases:
-                condition[fields["alternateBases"]] = args.alternateBases
-            if args.referenceBases:
-                condition[fields["referenceBases"]] = args.referenceBases
-            if args.collectionIds:
-                condition[fields["collectionIds"]] = {"$in": args.collectionIds}
-        
-            # Only add non-empty conditions to or_conditions
-            if condition:
-                or_conditions.append(condition)
-        
-        # Create the query only if or_conditions is not empty
-        query = {"$or": or_conditions} if or_conditions else {}
+        query = {
+            "variation.location.sequence_id": args.referenceName,
+            "variation.location.interval.start.value": args.start,
+            "variation.alternateBases": args.alternateBases,
+            "variation.referenceBases": args.referenceBases,
+            "caseLevelData.biosampleId": {"$in": args.collectionIds} if args.collectionIds else None
+        }
 
         # Debugging print statement to verify the constructed query
         print("Constructed query:", query)
@@ -186,39 +306,16 @@ def beacon_query():
                     sys.exit(1)
         
         
-        possible_fields = [
-            {"referenceName": "referenceName", "start": "start", "end": "end", "variantType": "variantType", "alternateBases": "alternateBases", "aminoacidChange": "aminoacidChange", "variantMinLength": "variantMinLength", "variantMaxLength": "variantMaxLength"},
-            {"referenceName": "variation.location.sequence_id", "start": "variation.location.interval.start.value", "end": "variation.location.interval.end.value", "variantType": "variation.variantType", "alternateBases": "variation.alternateBases", "aminoacidChange": "molecularAttributes.aminoacidChanges", "variantMinLength": "variation.location.interval.start.value", "variantMaxLength": "variation.location.interval.end.value"}
-            # Add other potential field mappings as needed
-        ]
-        
-        or_conditions = []
-        
-        for fields in possible_fields:
-            condition = {}
-            if args.referenceName:
-                condition[fields["referenceName"]] = args.referenceName
-            if args.start is not None:
-                condition[fields["start"]] = args.start
-            if args.end is not None:
-                condition[fields["end"]] = args.end
-            if args.variantType:
-                condition[fields["variantType"]] = args.variantType
-            if args.alternateBases:
-                condition[fields["alternateBases"]] = args.alternateBases
-            if args.aminoacidChange:
-                condition[fields["aminoacidChange"]] = args.aminoacidChange
-            if args.variantMinLength is not None:
-                condition[fields["variantMinLength"]] = {"$gte": args.variantMinLength}
-            if args.variantMaxLength is not None:
-                condition[fields["variantMaxLength"]] = {"$lte": args.variantMaxLength}
-        
-            # Only add non-empty conditions to or_conditions
-            if condition:
-                or_conditions.append(condition)
-        
-        # Create the query only if or_conditions is not empty
-        query = {"$or": or_conditions} if or_conditions else {}
+        query = {
+            "variation.location.sequence_id": args.referenceName,
+            "variation.location.interval.start.value": args.start,
+            "variation.location.interval.end.value": args.end,
+            "variation.variantType": args.variantType,
+            "variation.alternateBases": args.alternateBases,
+            "molecularAttributes.aminoacidChanges": args.aminoacidChange,
+            "variation.location.interval.start.value": {"$gte": args.variantMinLength} if args.variantMinLength is not None else None,
+            "variation.location.interval.end.value": {"$lte": args.variantMaxLength} if args.variantMaxLength is not None else None
+        }
 
 
     # query gene_id_queries
@@ -230,35 +327,14 @@ def beacon_query():
                     print(f"Missing value -> {arg}. Use -h or --help for usage details.")
                     parsers[args.command].print_help()
                     sys.exit(1)
-        possible_fields = [
-            {"geneId": "geneId", "variantType": "variantType", "alternateBases": "alternateBases", "aminoacidChange": "aminoacidChange", "variantMinLength": "variantMinLength", "variantMaxLength": "variantMaxLength"},
-            {"geneId": "molecularAttributes.geneIds", "variantType": "variation.variantType", "alternateBases": "variation.alternateBases", "aminoacidChange": "molecularAttributes.aminoacidChanges", "variantMinLength": "variation.location.interval.start.value", "variantMaxLength": "variation.location.interval.end.value"}
-            # Add other potential field mappings as needed
-        ]
-        
-        or_conditions = []
-        
-        for fields in possible_fields:
-            condition = {}
-            if args.geneId:
-                condition[fields["geneId"]] = args.geneId
-            if args.variantType:
-                condition[fields["variantType"]] = args.variantType
-            if args.alternateBases:
-                condition[fields["alternateBases"]] = args.alternateBases
-            if args.aminoacidChange:
-                condition[fields["aminoacidChange"]] = args.aminoacidChange
-            if args.variantMinLength is not None:
-                condition[fields["variantMinLength"]] = {"$gte": args.variantMinLength}
-            if args.variantMaxLength is not None:
-                condition[fields["variantMaxLength"]] = {"$lte": args.variantMaxLength}
-        
-            # Only add non-empty conditions to or_conditions
-            if condition:
-                or_conditions.append(condition)
-        
-        # Create the query only if or_conditions is not empty
-        query = {"$or": or_conditions} if or_conditions else {}
+        query = {
+            "molecularAttributes.geneIds": args.geneId,
+            "variation.variantType": args.variantType,
+            "variation.alternateBases": args.alternateBases,
+            "molecularAttributes.aminoacidChanges": args.aminoacidChange,
+            "variation.location.interval.start.value": {"$gte": args.variantMinLength} if args.variantMinLength is not None else None,
+            "variation.location.interval.end.value": {"$lte": args.variantMaxLength} if args.variantMaxLength is not None else None
+        }
 
 
     # query bracket_queries
@@ -271,32 +347,147 @@ def beacon_query():
                     parsers[args.command].print_help()
                     sys.exit(1)
         
-        possible_fields = [
-            {"referenceName": "referenceName", "start": "start", "end": "end", "variantType": "variantType"},
-            {"referenceName": "variation.location.sequence_id", "start": "variation.location.interval.start.value", "end": "variation.location.interval.end.value", "variantType": "variation.variantType"}
-            # Add other potential field mappings as needed
-        ]
+        query = {
+            "variation.location.sequence_id": args.referenceName,
+            "variation.location.interval.start.value": {"$gte": args.start_minimum, "$lte": args.start_maximum} if args.start_minimum is not None and args.start_maximum is not None else None,
+            "variation.location.interval.end.value": {"$gte": args.end_minimum, "$lte": args.end_maximum} if args.end_minimum is not None and args.end_maximum is not None else None,
+            "variation.variantType": args.variantType
+        }
+    # query analyses collection
+    elif args.command == "analyses":
+        required_args = ['database', 'collection', 'database_host', 'database_port']
+        if any(getattr(args, arg)  != "" for arg in required_args):
+            for arg in required_args:
+                if not getattr(args, arg):
+                    print(f"Missing value -> {arg}. Use -h or --help for usage details.")
+                    parsers[args.command].print_help()
+                    sys.exit(1)
         
-        or_conditions = []
+        query = {
+            "aligner": args.aligner,
+            "analysisDate": args.analysisDate,
+            "biosampleId": args.biosampleId,
+            "id": args.identification,
+            "individualId": args.individualId,
+            "pipelineName": args.pipelineName,
+            "pipelineRef": args.pipelineRef,
+            "runId": args.runId,
+            "variantCaller": args.variantCaller
+        }
         
-        for fields in possible_fields:
-            condition = {}
-            if args.referenceName:
-                condition[fields["referenceName"]] = args.referenceName
-            if args.start_minimum is not None and args.start_maximum is not None:
-                condition[fields["start"]] = {"$gte": args.start_minimum, "$lte": args.start_maximum}
-            if args.end_minimum is not None and args.end_maximum is not None:
-                condition[fields["end"]] = {"$gte": args.end_minimum, "$lte": args.end_maximum}
-            if args.variantType:
-                condition[fields["variantType"]] = args.variantType
         
-            # Only add non-empty conditions to or_conditions
-            if condition:
-                or_conditions.append(condition)
+    # query biosample collection
+    elif args.command == "biosamples":
+        required_args = ['database', 'collection', 'database_host', 'database_port']
+        if any(getattr(args, arg)  != "" for arg in required_args):
+            for arg in required_args:
+                if not getattr(args, arg):
+                    print(f"Missing value -> {arg}. Use -h or --help for usage details.")
+                    parsers[args.command].print_help()
+                    sys.exit(1)
         
-        # Create the query only if or_conditions is not empty
-        query = {"$or": or_conditions} if or_conditions else {}
+        query = {
+            "biosampleStatus.label": args.biosampleStatus,
+            "collectionDate": args.collectionDate,
+            "collectionMoment": args.collectionMoment,
+            "id": args.identification,
+            "obtentionProcedure.procedureCode.label": args.obtentionProcedure,
+            "sampleOriginType.label": args.sampleOriginType,
+            "histologicalDiagnosis.label": args.histologicalDiagnosis,
+            "pathologicalStage.label": args.pathologicalStage,
+            "pathologicalTnmFinding.label": args.pathologicalTnmFinding,
+            "phenotypicFeatures.featureType.label": args.featureType,
+            "phenotypicFeatures.severity.label": args.severity,
+            "sampleOriginDetail.label": args.sampleOriginDetail,
+            "sampleProcessing.label": args.sampleProcessing,
+            "sampleStorage.label": args.sampleStorage,
+            "tumorGrade.label": args.tumorGrade,
+            "tumorProgression.label": args.tumorProgression
+        }
 
+    # query cohorts collection
+    elif args.command == "cohorts":
+        required_args = ['database', 'collection', 'database_host', 'database_port']
+        if any(getattr(args, arg)  != "" for arg in required_args):
+            for arg in required_args:
+                if not getattr(args, arg):
+                    print(f"Missing value -> {arg}. Use -h or --help for usage details.")
+                    parsers[args.command].print_help()
+                    sys.exit(1)
+
+        query = {
+            "cohortDataTypes.label": args.cohortDataTypes,
+            "cohortDesign.label": args.cohortDesign,
+            "cohortSize": args.cohortSize,
+            "cohortType": args.cohortType,
+            "id": args.identification,
+            "inclusionCriteria.genders.label": args.genders,
+            "name": args.name
+        }
+
+    # query datasets collection
+    elif args.command == "datasets":
+        required_args = ['database', 'collection', 'database_host', 'database_port']
+        if any(getattr(args, arg)  != "" for arg in required_args):
+            for arg in required_args:
+                if not getattr(args, arg):
+                    print(f"Missing value -> {arg}. Use -h or --help for usage details.")
+                    parsers[args.command].print_help()
+                    sys.exit(1)
+
+        query = {
+            "dataUseConditions.duoDataUse.label": args.dataUseConditions,
+            "dataUseConditions.duoDataUse.modifiers.label": args.ontologyModifiers,
+            "id": args.identification,
+            "name": args.name
+        }
+
+    # query individuals collection
+    elif args.command == "individuals":
+        required_args = ['database', 'collection', 'database_host', 'database_port']
+        if any(getattr(args, arg)  != "" for arg in required_args):
+            for arg in required_args:
+                if not getattr(args, arg):
+                    print(f"Missing value -> {arg}. Use -h or --help for usage details.")
+                    parsers[args.command].print_help()
+                    sys.exit(1)
+
+        query = {
+            "diseases.ageOfOnset.ageGroup.label": args.ageGroup,
+            "diseases.diseaseCode.label": args.diseaseCode,
+            "diseases.familyHistory": args.familyHistory,
+            "diseases.severity": args.severity,
+            "diseases.stage": args.stage,
+            "ethnicity.label": args.ethnicity,
+            "geographicOrigin.label": args.geographicOrigin,
+            "id": args.identification,
+            "measures.assayCode.label": args.assayCode,
+            "sex.label": args.sex
+        }
+    
+    
+    # query individuals collection
+    elif args.command == "runs":
+        required_args = ['database', 'collection', 'database_host', 'database_port']
+        if any(getattr(args, arg)  != "" for arg in required_args):
+            for arg in required_args:
+                if not getattr(args, arg):
+                    print(f"Missing value -> {arg}. Use -h or --help for usage details.")
+                    parsers[args.command].print_help()
+                    sys.exit(1)
+        
+        query = {
+            "id": args.identification,
+            "individualId": args.individualId,
+            "libraryLayout": args.libraryLayout,
+            "librarySelection": args.librarySelection,
+            "librarySource.label": args.librarySource,
+            "libraryStrategy": args.libraryStrategy,
+            "platform": args.platform,
+            "platformModel.label": args.platformModel,
+            "runDate": args.runDate
+        }
+    
     # Connect to MongoDB collection
     advanced_required_args = ['database_auth_source', 'database_user', 'database_password']
     if any(getattr(args, arg)  != "" for arg in advanced_required_args):
