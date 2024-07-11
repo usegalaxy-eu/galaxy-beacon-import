@@ -82,8 +82,8 @@ def beacon_query():
     parsers = {}
     # subparsers.required = True
 
-    # Sub-parser for command "Beacon Sequence querys"
-    parser_sequence = subparsers.add_parser("sequence", help="Connect to MongoDB and perform sequence-based querys to the genomicVariations collection")
+    # Sub-parser for command "Beacon Sequence queries"
+    parser_sequence = subparsers.add_parser("sequence", help="Connect to MongoDB and perform sequence-based queries to the genomicVariations collection")
     common_arguments(parser_sequence)
     parsers["sequence"] = parser_sequence
 
@@ -97,8 +97,8 @@ def beacon_query():
     optional_query_group.add_argument("-s", "--start", type=int, default=None, dest="start", help="Start position")
     optional_query_group.add_argument("-id", "--collectionIds", type=str, default="", dest="collectionIds", help="Collection ID")
     
-    # Sub-parser for command "Beacon Range querys"
-    parser_range = subparsers.add_parser("range", help="Connect to MongoDB and perform range-based querys to the genomicVariations collection")
+    # Sub-parser for command "Beacon Range queries"
+    parser_range = subparsers.add_parser("range", help="Connect to MongoDB and perform range-based queries to the genomicVariations collection")
     common_arguments(parser_range)
     parsers["range"] = parser_range
     
@@ -115,8 +115,8 @@ def beacon_query():
     optional_query_group.add_argument("-vmax", "--variantMinLength", type=int, default=None, dest="variantMinLength", help="Variant minimum length")
     optional_query_group.add_argument("-vmin", "--variantMaxLength", type=int, default=None, dest="variantMaxLength", help="Variant maximum length")
     
-    # Sub-parser for command "Beacon GeneId querys"
-    parser_gene = subparsers.add_parser("gene", help="Connect to MongoDB and perform geneID-based querys to the genomicVariations collection")
+    # Sub-parser for command "Beacon GeneId queries"
+    parser_gene = subparsers.add_parser("gene", help="Connect to MongoDB and perform geneID-based queries to the genomicVariations collection")
     common_arguments(parser_gene)
     parsers["gene"] = parser_gene
     # Positional Search Query Parameters
@@ -130,10 +130,10 @@ def beacon_query():
     optional_query_group.add_argument("-vmax", "--variantMinLength", type=int, default=None, dest="variantMinLength", help="Variant minimum length")
     optional_query_group.add_argument("-vmin", "--variantMaxLength", type=int, default=None, dest="variantMaxLength", help="Variant maximum length")
     
-    # Sub-parser for command "Beacon Bracket querys"
+    # Sub-parser for command "Beacon Bracket queries"
 
-    # Sub-parser for command "Beacon Bracket querys"
-    parser_bracket = subparsers.add_parser("bracket", help="Connect to MongoDB and perform bracket-based querys to the genomicVariations collection")
+    # Sub-parser for command "Beacon Bracket queries"
+    parser_bracket = subparsers.add_parser("bracket", help="Connect to MongoDB and perform bracket-based queries to the genomicVariations collection")
     common_arguments(parser_bracket)
     parsers["bracket"] = parser_bracket
     
@@ -151,9 +151,9 @@ def beacon_query():
     optional_query_group.add_argument("-v", "--variantType", type=str, default="", dest="variantType", help="Variant type")
     
     
-    # Sub-parser for command "Beacon analyses querys"
+    # Sub-parser for command "Beacon analyses queries"
 
-    # Sub-parser for command "Beacon analyses querys"
+    # Sub-parser for command "Beacon analyses queries"
     parser_analyses = subparsers.add_parser("analyses", help="Connect to MongoDB and query the analyses collection")
     common_arguments(parser_analyses)
     parsers["analyses"] = parser_analyses
@@ -174,7 +174,7 @@ def beacon_query():
     
 
 
-    # Sub-parser for command "Beacon Biosample querys"
+    # Sub-parser for command "Beacon Biosample queries"
     parser_biosamples = subparsers.add_parser("biosamples", help="Connect to MongoDB and query the biosample collection")
     common_arguments(parser_biosamples)
     parsers["biosamples"] = parser_biosamples
@@ -201,7 +201,7 @@ def beacon_query():
     optional_query_group.add_argument("-tg", "--tumorGrade", type=str, default="", dest="tumorGrade", help="Tumor Grade")
     optional_query_group.add_argument("-tp", "--tumorProgression", type=str, default="", dest="tumorProgression", help="Tumor Progression")
 
-    # Sub-parser for command "Beacon cohorts querys"
+    # Sub-parser for command "Beacon cohorts queries"
     parser_cohorts = subparsers.add_parser("cohorts", help="Connect to MongoDB and query the cohorts collection")
     common_arguments(parser_cohorts)
     parsers["cohorts"] = parser_cohorts
