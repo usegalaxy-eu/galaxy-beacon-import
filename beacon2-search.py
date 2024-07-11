@@ -72,6 +72,9 @@ def beacon_query():
     
     10. Query runs collection:
         beacon_search runs -d database_name -c collection_name -id identification -ii individual_id -ll library_layout -ls library_selection -s library_source -st library_strategy -p platform -pm platform_model -r run_date
+    
+    10. Query for cnv:
+        beacon_search cnv  -d database_name -c collection_name -id identification -ii individual_id
     """
     
     parser = argparse.ArgumentParser(description="Query Beacon Database")
@@ -79,8 +82,8 @@ def beacon_query():
     parsers = {}
     # subparsers.required = True
 
-    # Sub-parser for command "Beacon Sequence Queries"
-    parser_sequence = subparsers.add_parser("sequence", help="Connect to MongoDB and perform sequence-based queries to the genomicVariations collection")
+    # Sub-parser for command "Beacon Sequence querys"
+    parser_sequence = subparsers.add_parser("sequence", help="Connect to MongoDB and perform sequence-based querys to the genomicVariations collection")
     common_arguments(parser_sequence)
     parsers["sequence"] = parser_sequence
 
@@ -94,8 +97,8 @@ def beacon_query():
     optional_query_group.add_argument("-s", "--start", type=int, default=None, dest="start", help="Start position")
     optional_query_group.add_argument("-id", "--collectionIds", type=str, default="", dest="collectionIds", help="Collection ID")
     
-    # Sub-parser for command "Beacon Range Queries"
-    parser_range = subparsers.add_parser("range", help="Connect to MongoDB and perform range-based queries to the genomicVariations collection")
+    # Sub-parser for command "Beacon Range querys"
+    parser_range = subparsers.add_parser("range", help="Connect to MongoDB and perform range-based querys to the genomicVariations collection")
     common_arguments(parser_range)
     parsers["range"] = parser_range
     
@@ -112,8 +115,8 @@ def beacon_query():
     optional_query_group.add_argument("-vmax", "--variantMinLength", type=int, default=None, dest="variantMinLength", help="Variant minimum length")
     optional_query_group.add_argument("-vmin", "--variantMaxLength", type=int, default=None, dest="variantMaxLength", help="Variant maximum length")
     
-    # Sub-parser for command "Beacon GeneId Queries"
-    parser_gene = subparsers.add_parser("gene", help="Connect to MongoDB and perform geneID-based queries to the genomicVariations collection")
+    # Sub-parser for command "Beacon GeneId querys"
+    parser_gene = subparsers.add_parser("gene", help="Connect to MongoDB and perform geneID-based querys to the genomicVariations collection")
     common_arguments(parser_gene)
     parsers["gene"] = parser_gene
     # Positional Search Query Parameters
@@ -127,10 +130,10 @@ def beacon_query():
     optional_query_group.add_argument("-vmax", "--variantMinLength", type=int, default=None, dest="variantMinLength", help="Variant minimum length")
     optional_query_group.add_argument("-vmin", "--variantMaxLength", type=int, default=None, dest="variantMaxLength", help="Variant maximum length")
     
-    # Sub-parser for command "Beacon Bracket Queries"
+    # Sub-parser for command "Beacon Bracket querys"
 
-    # Sub-parser for command "Beacon Bracket Queries"
-    parser_bracket = subparsers.add_parser("bracket", help="Connect to MongoDB and perform bracket-based queries to the genomicVariations collection")
+    # Sub-parser for command "Beacon Bracket querys"
+    parser_bracket = subparsers.add_parser("bracket", help="Connect to MongoDB and perform bracket-based querys to the genomicVariations collection")
     common_arguments(parser_bracket)
     parsers["bracket"] = parser_bracket
     
@@ -148,10 +151,10 @@ def beacon_query():
     optional_query_group.add_argument("-v", "--variantType", type=str, default="", dest="variantType", help="Variant type")
     
     
-    # Sub-parser for command "Beacon analyses Queries"
+    # Sub-parser for command "Beacon analyses querys"
 
-    # Sub-parser for command "Beacon analyses Queries"
-    parser_analyses = subparsers.add_parser("analyses", help="Connect to MongoDB and querie the analyses collection")
+    # Sub-parser for command "Beacon analyses querys"
+    parser_analyses = subparsers.add_parser("analyses", help="Connect to MongoDB and query the analyses collection")
     common_arguments(parser_analyses)
     parsers["analyses"] = parser_analyses
     
@@ -171,8 +174,8 @@ def beacon_query():
     
 
 
-    # Sub-parser for command "Beacon Biosample Queries"
-    parser_biosamples = subparsers.add_parser("biosamples", help="Connect to MongoDB and querie the biosample collection")
+    # Sub-parser for command "Beacon Biosample querys"
+    parser_biosamples = subparsers.add_parser("biosamples", help="Connect to MongoDB and query the biosample collection")
     common_arguments(parser_biosamples)
     parsers["biosamples"] = parser_biosamples
     
@@ -198,8 +201,8 @@ def beacon_query():
     optional_query_group.add_argument("-tg", "--tumorGrade", type=str, default="", dest="tumorGrade", help="Tumor Grade")
     optional_query_group.add_argument("-tp", "--tumorProgression", type=str, default="", dest="tumorProgression", help="Tumor Progression")
 
-    # Sub-parser for command "Beacon cohorts Queries"
-    parser_cohorts = subparsers.add_parser("cohorts", help="Connect to MongoDB and querie the cohorts collection")
+    # Sub-parser for command "Beacon cohorts querys"
+    parser_cohorts = subparsers.add_parser("cohorts", help="Connect to MongoDB and query the cohorts collection")
     common_arguments(parser_cohorts)
     parsers["cohorts"] = parser_cohorts
     
@@ -216,7 +219,7 @@ def beacon_query():
     optional_query_group.add_argument("-n", "--name", type=str, default="", dest="name", help="Name")
     
     # Sub-parser for command "Beacon datasets Queries"
-    parser_datasets = subparsers.add_parser("datasets", help="Connect to MongoDB and querie the datasets collection")
+    parser_datasets = subparsers.add_parser("datasets", help="Connect to MongoDB and query the datasets collection")
     common_arguments(parser_datasets)
     parsers["datasets"] = parser_datasets
     
@@ -230,7 +233,7 @@ def beacon_query():
     optional_query_group.add_argument("-n", "--name", type=str, default="", dest="name", help="Name")
     
     # Sub-parser for command "Beacon individuals Queries"
-    parser_individuals = subparsers.add_parser("individuals", help="Connect to MongoDB and querie the individuals collection")
+    parser_individuals = subparsers.add_parser("individuals", help="Connect to MongoDB and query the individuals collection")
     common_arguments(parser_individuals)
     parsers["individuals"] = parser_individuals
     
@@ -250,7 +253,7 @@ def beacon_query():
     optional_query_group.add_argument("-s", "--sex", type=str, default="", dest="sex", help="sex")
     
     # Sub-parser for command "Beacon runs Queries"
-    parser_runs = subparsers.add_parser("runs", help="Connect to MongoDB and querie the runs collection")
+    parser_runs = subparsers.add_parser("runs", help="Connect to MongoDB and query the runs collection")
     common_arguments(parser_runs)
     parsers["runs"] = parser_runs
     
@@ -267,6 +270,25 @@ def beacon_query():
     optional_query_group.add_argument("-p", "--platform", type=str, default="", dest="platform", help="platform")
     optional_query_group.add_argument("-pm", "--platformModel", type=str, default="", dest="platformModel", help="Platform Model")
     optional_query_group.add_argument("-r", "--runDate", type=str, default="", dest="runDate", help="Run Date")
+    
+    # Sub-parser for command "Beacon cnv Queries"
+    parser_cnv = subparsers.add_parser("cnv", help="Connect to MongoDB and query the copy number variants (cnv) collection")
+    common_arguments(parser_cnv)
+    parsers["cnv"] = parser_cnv
+    
+    
+    # Optional Search Query Parameters
+    
+    optional_query_group = parser_cnv.add_argument_group("Optional Database Query Arguments")
+    optional_query_group.add_argument("-vi", "--variantInternalId", type=str, default="", dest="variantInternalId", help="VariantInternal Id")
+    optional_query_group.add_argument("-ai", "--analysisId", type=str, default="", dest="analysisId", help="Analysis Id")
+    optional_query_group.add_argument("-ii", "--individualId", type=str, default="", dest="individualId", help="Individual Id")
+    optional_query_group.add_argument("-s", "--start", type=int, default=None, dest="start", help="start")
+    optional_query_group.add_argument("-e", "--end", type=int, default=None, dest="end", help="end")
+    optional_query_group.add_argument("-ch", "--chromosome", type=str, default="", dest="chromosome", help="Chromosome")
+    optional_query_group.add_argument("-si", "--variantStateId", type=str, default="", dest="variantStateId", help="Variant State Id")
+    optional_query_group.add_argument("-vs", "--variantState", type=str, default="", dest="variantState", help="Variant State")
+    optional_query_group.add_argument("-sd", "--sequenceId", type=str, default="", dest="sequenceId", help="Sequence Id")
     
     args = parser.parse_args()
     # Check if a sub-command has been provided
@@ -488,6 +510,28 @@ def beacon_query():
             "runDate": args.runDate
         }
     
+    # query individuals collection
+    elif args.command == "cnv":
+        required_args = ['database', 'collection', 'database_host', 'database_port']
+        if any(getattr(args, arg)  != "" for arg in required_args):
+            for arg in required_args:
+                if not getattr(args, arg):
+                    print(f"Missing value -> {arg}. Use -h or --help for usage details.")
+                    parsers[args.command].print_help()
+                    sys.exit(1)
+        
+        query = {
+            "variantInternalId": args.variantInternalId,
+            "analysisId": args.analysisId,
+            "individualId": args.individualId,
+            "definitions.Location.start": args.start,
+            "definitions.Location.end": args.end,
+            "definitions.Location.chromosome": args.chromosome,
+            "variantState.id": args.variantStateId,
+            "variantState.label": args.variantState,
+            "definitions.Location.sequenceId": args.sequenceId
+        }
+
     # Connect to MongoDB collection
     advanced_required_args = ['database_auth_source', 'database_user', 'database_password']
     if any(getattr(args, arg)  != "" for arg in advanced_required_args):
