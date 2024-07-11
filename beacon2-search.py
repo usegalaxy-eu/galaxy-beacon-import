@@ -73,7 +73,8 @@ def beacon_query():
     10. Query runs collection:
         beacon_search runs -d database_name -c collection_name -id identification -ii individual_id -ll library_layout -ls library_selection -s library_source -st library_strategy -p platform -pm platform_model -r run_date
     
-    10. Query for cnv:
+    11. Query for cnv:
+
         beacon_search cnv  -d database_name -c collection_name -id identification -ii individual_id
     """
     
